@@ -455,19 +455,9 @@ make sanitize       # full sanitizer check
 - All public functions documented in headers
 - All magic numbers named as `#define` constants
 
-## Resume Bullet
 
-Built MOSRT, a C17 userspace operating-system runtime implementing guarded-stack green processes, deterministic workload execution, FCFS/RR/Priority/MLFQ schedulers, SIGALRM-safe preemption, blocking IPC, semaphores, mutexes, tracing, metrics, CSV/Markdown benchmarks, fuzz harness, stress tests, sanitizers, and CI quality gates.
 
 ## Future Work
-
-Memory management:
-
-- virtual address-space simulator
-- page tables and TLB model
-- page faults and replacement policies: FIFO, LRU, Clock
-- per-process heap simulator
-- copy-on-write fork model
 
 Storage management:
 
