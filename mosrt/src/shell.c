@@ -1,6 +1,7 @@
 #include "shell.h"
 
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +9,7 @@
 #include "proc.h"
 #include "runtime.h"
 #include "sched.h"
+#include "vm.h"
 
 #define SHELL_MAX_LINE 256
 #define SHELL_MAX_ARGS 8
@@ -33,7 +35,7 @@ static int parse_int(const char *s, int *out) {
     if (s == end || *end != '\0') {
         return 0;
     }
-    if (v < -2147483647L - 1L || v > 2147483647L) {
+    if (v < (long)INT_MIN || v > (long)INT_MAX) {
         return 0;
     }
     *out = (int)v;
@@ -58,6 +60,13 @@ static void cmd_help(void) {
     printf("  export trace <path.csv>\n");
     printf("  export metrics <path.csv>\n");
     printf("  bench\n");
+    printf("  reset\n");
+    printf("  vmmap <pid>\n");
+    printf("  pte <pid>\n");
+    printf("  frames\n");
+    printf("  tlb\n");
+    printf("  policy [fifo|lru|clock]\n");
+    printf("  vmem\n");
     printf("  help\n");
     printf("  exit\n");
 }
@@ -80,10 +89,6 @@ static void cmd_run(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
     }
 
     printf("created pid=%d from workload=%s\n", pid, argv[1]);
-}
-
-static void cmd_ps(void) {
-    proc_dump(stdout);
 }
 
 static void cmd_kill(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
@@ -118,14 +123,14 @@ static void cmd_sched(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
 }
 
 static void cmd_quantum(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
-    int ms = 0;
-    if (argc < 2 || !parse_int(argv[1], &ms) || ms <= 0) {
-        printf("usage: quantum <ms>\n");
+    int ticks = 0;
+    if (argc < 2 || !parse_int(argv[1], &ticks) || ticks <= 0) {
+        printf("usage: quantum <ticks>\n");
         return;
     }
 
-    runtime_set_quantum(&ctx->runtime, (unsigned)ms);
-    printf("quantum set to %u tick(s)\n", (unsigned)ms);
+    runtime_set_quantum(&ctx->runtime, (unsigned)ticks);
+    printf("quantum set to %u tick(s)\n", (unsigned)ticks);
 }
 
 static void cmd_trace(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
@@ -150,7 +155,9 @@ static void cmd_trace(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
     printf("trace target set to pid=%d\n", pid);
 }
 
-static void cmd_start(shell_ctx_t *ctx) {
+static void cmd_start(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)argc;
+    (void)argv;
     if (!runtime_start(&ctx->runtime)) {
         printf("error: failed to start timer\n");
         return;
@@ -158,7 +165,9 @@ static void cmd_start(shell_ctx_t *ctx) {
     printf("runtime started at tick=%" PRIu64 "\n", runtime_tick(&ctx->runtime));
 }
 
-static void cmd_stop(shell_ctx_t *ctx) {
+static void cmd_stop(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)argc;
+    (void)argv;
     runtime_stop(&ctx->runtime);
     printf("runtime stopped at tick=%" PRIu64 "\n", runtime_tick(&ctx->runtime));
 }
@@ -223,6 +232,150 @@ static void cmd_export(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
     printf("%s export %s: %s\n", argv[1], argv[2], rc == 0 ? "ok" : "failed");
 }
 
+static void cmd_reset(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)argc;
+    (void)argv;
+    runtime_shutdown(&ctx->runtime);
+    runtime_init(&ctx->runtime);
+    printf("runtime reset\n");
+}
+
+static void cmd_queues(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)argc;
+    (void)argv;
+    runtime_dump_queues(&ctx->runtime, stdout);
+}
+
+static void cmd_metrics_cmd(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)argc;
+    (void)argv;
+    runtime_print_metrics(&ctx->runtime, stdout);
+}
+
+static void cmd_bench_cmd(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)argc;
+    (void)argv;
+    runtime_benchmark(stdout);
+    runtime_init(&ctx->runtime);
+}
+
+static void cmd_ps_cmd(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)ctx;
+    (void)argc;
+    (void)argv;
+    proc_dump(stdout);
+}
+
+static void cmd_vmmap(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)ctx;
+    if (argc < 2) {
+        printf("usage: vmmap <pid>\n");
+        return;
+    }
+    int pid;
+    if (!parse_int(argv[1], &pid)) {
+        printf("invalid pid: %s\n", argv[1]);
+        return;
+    }
+    pcb_t *p = proc_get(pid);
+    if (p == NULL || p->vm == NULL) {
+        printf("pid not found or has no VM: %d\n", pid);
+        return;
+    }
+    vm_dump_proc_map(p->vm, stdout);
+}
+
+static void cmd_pte(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)ctx;
+    if (argc < 2) {
+        printf("usage: pte <pid>\n");
+        return;
+    }
+    int pid;
+    if (!parse_int(argv[1], &pid)) {
+        printf("invalid pid: %s\n", argv[1]);
+        return;
+    }
+    pcb_t *p = proc_get(pid);
+    if (p == NULL || p->vm == NULL) {
+        printf("pid not found or has no VM: %d\n", pid);
+        return;
+    }
+    vm_dump_proc_pte(p->vm, stdout);
+}
+
+static void cmd_frames(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)ctx; (void)argc; (void)argv;
+    vm_dump_global_frames(stdout);
+}
+
+static void cmd_tlb_cmd(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)ctx; (void)argc; (void)argv;
+    vm_dump_global_tlb(stdout);
+}
+
+static void cmd_policy(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)ctx;
+    if (argc < 2) {
+        printf("Current page replacement policy: %s\n", pager_get_policy_name());
+        printf("usage to set: policy <fifo|lru|clock>\n");
+        return;
+    }
+    if (pager_set_policy(argv[1])) {
+        printf("Replacement policy changed to: %s\n", argv[1]);
+    } else {
+        printf("Invalid replacement policy: %s (choose fifo, lru, clock)\n", argv[1]);
+    }
+}
+
+static void cmd_vmem(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)ctx; (void)argc; (void)argv;
+    vm_dump_global_faults(stdout);
+}
+
+static void cmd_help_cmd(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
+    (void)ctx;
+    (void)argc;
+    (void)argv;
+    cmd_help();
+}
+
+typedef void (*shell_handler_fn)(shell_ctx_t *, int, char *[SHELL_MAX_ARGS]);
+
+typedef struct {
+    const char *name;
+    shell_handler_fn handler;
+} shell_command_t;
+
+/* Command table — sorted by expected frequency for branch prediction. */
+static const shell_command_t k_commands[] = {
+    {"step",    cmd_step},
+    {"run",     cmd_run},
+    {"ps",      cmd_ps_cmd},
+    {"kill",    cmd_kill},
+    {"sched",   cmd_sched},
+    {"quantum", cmd_quantum},
+    {"nice",    cmd_nice},
+    {"prio",    cmd_prio},
+    {"trace",   cmd_trace},
+    {"start",   cmd_start},
+    {"stop",    cmd_stop},
+    {"queues",  cmd_queues},
+    {"metrics", cmd_metrics_cmd},
+    {"export",  cmd_export},
+    {"bench",   cmd_bench_cmd},
+    {"reset",   cmd_reset},
+    {"vmmap",   cmd_vmmap},
+    {"pte",     cmd_pte},
+    {"frames",  cmd_frames},
+    {"tlb",     cmd_tlb_cmd},
+    {"policy",  cmd_policy},
+    {"vmem",    cmd_vmem},
+    {"help",    cmd_help_cmd},
+};
+
+#define NUM_COMMANDS (sizeof(k_commands) / sizeof(k_commands[0]))
+
 void shell_run_repl(void) {
     shell_ctx_t ctx;
     memset(&ctx, 0, sizeof(ctx));
@@ -246,43 +399,20 @@ void shell_run_repl(void) {
             continue;
         }
 
-        if (strcmp(argv[0], "help") == 0) {
-            cmd_help();
-        } else if (strcmp(argv[0], "run") == 0) {
-            cmd_run(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "ps") == 0) {
-            cmd_ps();
-        } else if (strcmp(argv[0], "kill") == 0) {
-            cmd_kill(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "sched") == 0) {
-            cmd_sched(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "quantum") == 0) {
-            cmd_quantum(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "nice") == 0) {
-            cmd_nice(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "prio") == 0) {
-            cmd_prio(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "trace") == 0) {
-            cmd_trace(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "start") == 0) {
-            cmd_start(&ctx);
-        } else if (strcmp(argv[0], "stop") == 0) {
-            cmd_stop(&ctx);
-        } else if (strcmp(argv[0], "step") == 0) {
-            cmd_step(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "queues") == 0) {
-            runtime_dump_queues(&ctx.runtime, stdout);
-        } else if (strcmp(argv[0], "metrics") == 0) {
-            runtime_print_metrics(&ctx.runtime, stdout);
-        } else if (strcmp(argv[0], "export") == 0) {
-            cmd_export(&ctx, argc, argv);
-        } else if (strcmp(argv[0], "bench") == 0) {
-            runtime_benchmark(stdout);
-            runtime_init(&ctx.runtime);
-        } else if (strcmp(argv[0], "exit") == 0 || strcmp(argv[0], "quit") == 0) {
+        if (strcmp(argv[0], "exit") == 0 || strcmp(argv[0], "quit") == 0) {
             runtime_shutdown(&ctx.runtime);
             break;
-        } else {
+        }
+
+        bool handled = false;
+        for (size_t i = 0; i < NUM_COMMANDS; ++i) {
+            if (strcmp(argv[0], k_commands[i].name) == 0) {
+                k_commands[i].handler(&ctx, argc, argv);
+                handled = true;
+                break;
+            }
+        }
+        if (!handled) {
             printf("unknown command: %s\n", argv[0]);
         }
     }

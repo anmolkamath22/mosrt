@@ -10,8 +10,15 @@
 #include "sync.h"
 #include "timer.h"
 #include "workload.h"
+#include "vm.h"
+#include "tlb.h"
+#include "pager.h"
 
-#define MLFQ_BOOST_INTERVAL 50U
+#define MLFQ_BOOST_INTERVAL  50U
+#define DEFAULT_QUANTUM      10U
+#define MAX_DISPATCH_GUARD   1024U
+#define BENCH_MAX_TICKS      500U
+#define ERR_BUF_SIZE         160
 
 static runtime_t *g_context_runtime;
 
@@ -33,10 +40,15 @@ static void make_detail(char *buf, size_t bufsz, const char *text, int value) {
     snprintf(buf, bufsz, "%s %d", text, value);
 }
 
-static int slot_index(runtime_t *rt, int pid) {
-    for (int i = 0; i < MOSRT_MAX_PROCS; ++i) {
-        if (rt->slots[i].used && rt->slots[i].pid == pid) {
-            return i;
+/* O(1) PID→slot index; -1 when unmapped. Mirrors proc.c pid_to_slot. */
+static int g_slot_by_pid[MOSRT_MAX_PROCS];
+
+static int slot_index(const runtime_t *rt, int pid) {
+    if (pid >= 1 && pid <= MOSRT_MAX_PROCS) {
+        int idx = g_slot_by_pid[pid - 1];
+        if (idx >= 0 && idx < MOSRT_MAX_PROCS && rt->slots[idx].used &&
+            rt->slots[idx].pid == pid) {
+            return idx;
         }
     }
     return -1;
@@ -48,6 +60,9 @@ static int alloc_slot(runtime_t *rt, int pid) {
             memset(&rt->slots[i], 0, sizeof(rt->slots[i]));
             rt->slots[i].used = true;
             rt->slots[i].pid = pid;
+            if (pid >= 1 && pid <= MOSRT_MAX_PROCS) {
+                g_slot_by_pid[pid - 1] = i;
+            }
             return i;
         }
     }
@@ -112,12 +127,15 @@ static bool dispatch(runtime_t *rt) {
         return false;
     }
     rt->current_pid = pid;
+    /* Trace dispatch *before* the context switch so the recorded tick
+     * reflects when the process was selected, not when it yielded back. */
+    trace_event(&rt->trace, rt->tick, pid, "DISPATCH", runtime_scheduler_name(rt));
     pcb_t *p = proc_get(pid);
     if (p != NULL) {
+        tlb_flush();
         g_context_runtime = rt;
         (void)swapcontext(&rt->dispatcher_context, &p->context);
     }
-    trace_event(&rt->trace, rt->tick, pid, "DISPATCH", runtime_scheduler_name(rt));
     return true;
 }
 
@@ -207,12 +225,18 @@ static bool execute_instruction(runtime_t *rt) {
             trace_event(&rt->trace, rt->tick, pid, "CPU", "tick");
             maybe_preempt(rt);
             return true;
-        case WORKLOAD_IO:
-            proc_get(pid)->wakeup_tick = rt->tick + insn->ticks;
-            make_detail(detail, sizeof(detail), "until", (int)proc_get(pid)->wakeup_tick);
+        case WORKLOAD_IO: {
+            pcb_t *io_p = proc_get(pid);
+            if (io_p == NULL) {
+                exit_current(rt, 1);
+                return false;
+            }
+            io_p->wakeup_tick = rt->tick + insn->ticks;
+            make_detail(detail, sizeof(detail), "until", (int)io_p->wakeup_tick);
             complete_immediate(rt, idx);
             block_current(rt, detail);
             return false;
+        }
         case WORKLOAD_SEND: {
             ipc_result_t r = ipc_send(insn->arg0, pid, insn->arg1);
             if (r == IPC_ERROR) {
@@ -300,6 +324,84 @@ static bool execute_instruction(runtime_t *rt) {
             complete_immediate(rt, idx);
             return false;
         }
+        case WORKLOAD_MMAP: {
+            pcb_t *p = proc_get(pid);
+            if (p == NULL || p->vm == NULL) {
+                exit_current(rt, 5);
+                return false;
+            }
+            uint16_t addr = vm_malloc(pid, p->vm, insn->arg0, rt->tick);
+            if (addr == 0) {
+                exit_current(rt, 5);
+                return false;
+            }
+            p->vm_last_alloc = addr;
+            snprintf(detail, sizeof(detail), "size=%d addr=0x%04X", insn->arg0, addr);
+            trace_event(&rt->trace, rt->tick, pid, "MMAP", detail);
+            complete_immediate(rt, idx);
+            return false;
+        }
+        case WORKLOAD_ACCESS: {
+            pcb_t *p = proc_get(pid);
+            if (p == NULL || p->vm == NULL) {
+                exit_current(rt, 5);
+                return false;
+            }
+            uint16_t addr = (insn->arg0 < 0) ? (uint16_t)(p->vm_last_alloc - insn->arg0) : (uint16_t)insn->arg0;
+            bool is_write = (insn->arg1 != 0);
+            uint8_t byte_val = 0xAA;
+
+            tlb_stats_t tlb_before = tlb_get_stats();
+            pager_stats_t pager_before = pager_get_stats();
+
+            int status;
+            if (is_write) {
+                status = vm_write_mem(pid, p->vm, addr, &byte_val, 1, rt->tick);
+            } else {
+                status = vm_read_mem(pid, p->vm, addr, &byte_val, 1, rt->tick);
+            }
+
+            if (status < 0) {
+                exit_current(rt, 6);
+                return false;
+            }
+
+            pager_stats_t pager_after = pager_get_stats();
+            tlb_stats_t tlb_after = tlb_get_stats();
+
+            bool hit_tlb = (tlb_after.hits > tlb_before.hits);
+            bool minor_fault = (pager_after.minor_faults > pager_before.minor_faults);
+            bool major_fault = (pager_after.major_faults > pager_before.major_faults);
+
+            snprintf(detail, sizeof(detail), "%s addr=0x%04X %s",
+                     is_write ? "write" : "read", addr,
+                     hit_tlb ? "TLB-hit" : (minor_fault ? "minor-fault" : (major_fault ? "major-fault" : "page-hit")));
+            trace_event(&rt->trace, rt->tick, pid, "ACCESS", detail);
+
+            if (major_fault) {
+                /* major fault blocks process for simulated disk read latency.
+                 * Do not advance PC (re-execute access instruction). */
+                p->wakeup_tick = rt->tick + VM_PAGE_FAULT_LATENCY;
+                block_current(rt, "page fault");
+                return false;
+            }
+
+            complete_immediate(rt, idx);
+            return false;
+        }
+        case WORKLOAD_MFREE: {
+            pcb_t *p = proc_get(pid);
+            if (p == NULL || p->vm == NULL) {
+                exit_current(rt, 5);
+                return false;
+            }
+            vm_free(pid, p->vm, p->vm_last_alloc, rt->tick);
+            snprintf(detail, sizeof(detail), "addr=0x%04X", p->vm_last_alloc);
+            trace_event(&rt->trace, rt->tick, pid, "MFREE", detail);
+            p->vm_last_alloc = 0;
+            complete_immediate(rt, idx);
+            return false;
+        }
         case WORKLOAD_EXIT:
             exit_current(rt, 0);
             return false;
@@ -314,9 +416,11 @@ void runtime_init(runtime_t *rt) {
         return;
     }
     memset(rt, 0, sizeof(*rt));
+    memset(g_slot_by_pid, -1, sizeof(g_slot_by_pid));
     rt->current_pid = -1;
     proc_table_init();
-    sched_init(&rt->scheduler, SCHED_RR, 10U);
+    vm_init();
+    sched_init(&rt->scheduler, SCHED_RR, DEFAULT_QUANTUM);
     trace_init(&rt->trace);
     ipc_init();
     sync_init();
@@ -330,13 +434,14 @@ void runtime_shutdown(runtime_t *rt) {
     }
     timer_stop();
     proc_table_shutdown();
+    vm_shutdown();
 }
 
 int runtime_run_workload(runtime_t *rt, const char *path, int priority) {
     if (rt == NULL || path == NULL) {
         return -1;
     }
-    char err[160];
+    char err[ERR_BUF_SIZE];
     workload_t workload;
     char candidate1[256];
     char candidate2[256];
@@ -361,6 +466,13 @@ int runtime_run_workload(runtime_t *rt, const char *path, int priority) {
         return -1;
     }
     pcb_t *p = proc_get(pid);
+    if (p != NULL) {
+        p->vm = vm_proc_init(pid);
+        if (p->vm == NULL) {
+            proc_destroy(pid, 1);
+            return -1;
+        }
+    }
     if (p != NULL && getcontext(&p->context) == 0) {
         p->context.uc_stack.ss_sp = p->stack;
         p->context.uc_stack.ss_size = p->stack_size;
@@ -385,7 +497,7 @@ void runtime_step(runtime_t *rt, unsigned ticks) {
     for (unsigned i = 0U; i < ticks; ++i) {
         bool consumed = false;
         unsigned guard = 0U;
-        while (!consumed && guard++ < 1024U) {
+        while (!consumed && guard++ < MAX_DISPATCH_GUARD) {
             proc_for_each(wake_blocked_by_time, rt);
             sched_age_ready(&rt->scheduler, rt->tick);
             if (sched_algo(&rt->scheduler) == SCHED_PRIO) {
@@ -424,6 +536,9 @@ bool runtime_kill(runtime_t *rt, int pid) {
     int idx = slot_index(rt, pid);
     if (idx >= 0) {
         memset(&rt->slots[idx], 0, sizeof(rt->slots[idx]));
+        if (pid >= 1 && pid <= MOSRT_MAX_PROCS) {
+            g_slot_by_pid[pid - 1] = -1;
+        }
     }
     trace_event(&rt->trace, rt->tick, pid, "KILL", "requested");
     rebuild_ready_queues(rt);
@@ -590,7 +705,7 @@ static void bench_one(FILE *out, sched_algo_t algo) {
     (void)runtime_run_workload(&rt, "workloads/cpu_bound.wl", MOSRT_DEFAULT_PRIO);
     (void)runtime_run_workload(&rt, "workloads/io_bound.wl", MOSRT_DEFAULT_PRIO);
     (void)runtime_run_workload(&rt, "workloads/mixed.wl", MOSRT_DEFAULT_PRIO);
-    for (unsigned i = 0; i < 500U && proc_live_count() > 0; ++i) {
+    for (unsigned i = 0; i < BENCH_MAX_TICKS && proc_live_count() > 0; ++i) {
         runtime_step(&rt, 1U);
     }
     fprintf(out, "%s: ", sched_algo_name(algo));

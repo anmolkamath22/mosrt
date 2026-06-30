@@ -115,6 +115,12 @@ int workload_load(const char *path, workload_t *out, char *err, size_t errsz) {
             insn.op = WORKLOAD_LOCK;
         } else if (strcmp(argv[0], "UNLOCK") == 0 && argc == 2 && parse_i32(argv[1], &insn.arg0)) {
             insn.op = WORKLOAD_UNLOCK;
+        } else if (strcmp(argv[0], "MMAP") == 0 && argc == 2 && parse_i32(argv[1], &insn.arg0)) {
+            insn.op = WORKLOAD_MMAP;
+        } else if (strcmp(argv[0], "ACCESS") == 0 && argc == 3 && parse_i32(argv[1], &insn.arg0) && parse_i32(argv[2], &insn.arg1)) {
+            insn.op = WORKLOAD_ACCESS;
+        } else if (strcmp(argv[0], "MFREE") == 0 && argc == 1) {
+            insn.op = WORKLOAD_MFREE;
         } else if (strcmp(argv[0], "EXIT") == 0 && argc == 1) {
             insn.op = WORKLOAD_EXIT;
         } else {
@@ -147,6 +153,9 @@ const char *workload_op_name(workload_op_t op) {
         case WORKLOAD_SEM_POST: return "SEM_POST";
         case WORKLOAD_LOCK: return "LOCK";
         case WORKLOAD_UNLOCK: return "UNLOCK";
+        case WORKLOAD_MMAP: return "MMAP";
+        case WORKLOAD_ACCESS: return "ACCESS";
+        case WORKLOAD_MFREE: return "MFREE";
         case WORKLOAD_EXIT: return "EXIT";
         default: return "UNKNOWN";
     }

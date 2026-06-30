@@ -1,4 +1,5 @@
 #include "proc.h"
+#include "vm.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
@@ -9,6 +10,10 @@
 typedef struct {
     pcb_t entries[MOSRT_MAX_PROCS];
     int next_pid;
+    /* O(1) pid→slot index; -1 when unmapped.  PIDs are sequential
+     * starting from 1 and never reused within a single run, so only
+     * the first next_pid-1 entries are meaningful. */
+    int pid_to_slot[MOSRT_MAX_PROCS];
 } process_table_t;
 
 static process_table_t g_ptable;
@@ -80,9 +85,11 @@ static int find_free_slot(void) {
 }
 
 static int find_slot_by_pid(int pid) {
-    for (int i = 0; i < MOSRT_MAX_PROCS; ++i) {
-        if (g_ptable.entries[i].used && g_ptable.entries[i].pid == pid) {
-            return i;
+    if (pid >= 1 && pid < g_ptable.next_pid && pid <= MOSRT_MAX_PROCS) {
+        int slot = g_ptable.pid_to_slot[pid - 1];
+        if (slot >= 0 && slot < MOSRT_MAX_PROCS &&
+            g_ptable.entries[slot].used && g_ptable.entries[slot].pid == pid) {
+            return slot;
         }
     }
     return -1;
@@ -92,11 +99,16 @@ void proc_table_init(void) {
     proc_table_shutdown();
     memset(&g_ptable, 0, sizeof(g_ptable));
     g_ptable.next_pid = 1;
+    memset(g_ptable.pid_to_slot, -1, sizeof(g_ptable.pid_to_slot));
 }
 
 void proc_table_shutdown(void) {
     for (int i = 0; i < MOSRT_MAX_PROCS; ++i) {
         release_stack(&g_ptable.entries[i]);
+        if (g_ptable.entries[i].vm != NULL) {
+            vm_proc_destroy(g_ptable.entries[i].vm);
+            g_ptable.entries[i].vm = NULL;
+        }
     }
 }
 
@@ -121,6 +133,9 @@ int proc_create(int ppid, int priority, uint64_t now_tick, size_t stack_size) {
 
     p->used = true;
     p->pid = g_ptable.next_pid++;
+    if (p->pid <= MOSRT_MAX_PROCS) {
+        g_ptable.pid_to_slot[p->pid - 1] = slot;
+    }
     p->ppid = ppid;
     p->state = PROC_NEW;
     if (priority < MOSRT_MIN_PRIO) {
@@ -224,9 +239,16 @@ void proc_destroy(int pid, int exit_code) {
     }
 
     release_stack(p);
+    if (p->vm != NULL) {
+        vm_proc_destroy(p->vm);
+        p->vm = NULL;
+    }
     p->exit_code = exit_code;
     p->state = PROC_EXITED;
     p->used = false;
+    if (pid >= 1 && pid <= MOSRT_MAX_PROCS) {
+        g_ptable.pid_to_slot[pid - 1] = -1;
+    }
 }
 
 int proc_count(void) {

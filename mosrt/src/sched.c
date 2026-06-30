@@ -4,6 +4,8 @@
 
 #include "proc.h"
 
+#define AGING_INTERVAL 5U
+
 static bool queue_contains(const int *q, size_t head, size_t len, int pid) {
     for (size_t i = 0; i < len; ++i) {
         if (q[(head + i) % MOSRT_MAX_PROCS] == pid) {
@@ -231,7 +233,7 @@ bool sched_should_preempt(const scheduler_t *sched, int current_pid) {
 static void age_one(pcb_t *p, void *ctx) {
     uint64_t now_tick = *(uint64_t *)ctx;
     if (p->state == PROC_READY && p->priority > MOSRT_MIN_PRIO &&
-        now_tick > p->last_ready_tick && (now_tick - p->last_ready_tick) % 5U == 0U) {
+        now_tick > p->last_ready_tick && (now_tick - p->last_ready_tick) % AGING_INTERVAL == 0U) {
         --p->priority;
     }
 }

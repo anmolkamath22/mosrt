@@ -42,6 +42,8 @@ typedef struct {
     size_t stack_size;
     size_t stack_mapping_size;
     int exit_code;
+    struct vm_state *vm;
+    uint16_t vm_last_alloc;
 } pcb_t;
 
 void proc_table_init(void);

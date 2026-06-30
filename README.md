@@ -1,4 +1,6 @@
-# MOSRT - Mini-OS Runtime
+# MOSRT — Mini-OS Runtime
+
+
 
 MOSRT is a feature-complete userspace operating-system runtime written in C17 for Linux. It models advanced process-management concepts without requiring kernel-mode development: PCBs, process states, pluggable schedulers, guarded user stacks, `ucontext` switching, safe timer preemption, deterministic workloads, blocking I/O, IPC, synchronization, tracing, metrics, benchmarks, tests, and CI quality gates.
 
@@ -23,12 +25,14 @@ MOSRT is not a toy shell and not a monolithic simulator. It is a small userspace
 | Context switching | `ucontext_t`, dedicated stacks, guard pages, `swapcontext()` tracing |
 | Preemption | safe SIGALRM + `setitimer` reschedule flag, quantum management |
 | Schedulers | FCFS, Round Robin, Priority with aging, MLFQ with demotion/boost |
+| Virtual Memory | 16-bit space, 256B pages, demand paging, TLB, FIFO/LRU/Clock policies, swap simulation |
+| Heap Allocator | Per-process dynamic heap (malloc/free simulation) with split/coalesce logic |
 | Accounting | CPU time, wait time, response time, turnaround, throughput, CPU utilization |
 | Blocking | deterministic I/O instructions, blocked queue semantics, wakeups |
 | IPC | bounded message queues, blocking send, blocking receive, direct receiver handoff |
 | Synchronization | counting semaphores, mutexes, waiter grants, ownership checks |
-| Shell | `run`, `ps`, `kill`, `sched`, `quantum`, `trace`, `step`, `metrics`, exports |
-| Quality | unit tests, integration tests, stress tests, sanitizer target, coverage target, CI |
+| Shell | run, ps, kill, sched, nice/prio, VM inspection (vmmap, pte, frames, tlb, policy), exports |
+| Quality | unit tests, integration tests, stress tests, fuzz harness, sanitizers, coverage, CI |
 | Benchmarking | scheduler comparison, CPU-bound, I/O-bound, mixed, 100-process, 1000-process |
 
 ## Architecture
@@ -36,7 +40,7 @@ MOSRT is not a toy shell and not a monolithic simulator. It is a small userspace
 ```text
                   +----------------------+
                   |      MOSRT Shell     |
-                  | commands, scripts    |
+                  | table-driven cmds    |
                   +----------+-----------+
                              |
                              v
@@ -51,8 +55,9 @@ MOSRT is not a toy shell and not a monolithic simulator. It is a small userspace
 +---------------+    +---------------+      +----------------+
 | Process Table |    | Scheduler API |      | Trace/Metrics  |
 | PCBs, stacks  |    | FCFS/RR/PRIO  |      | CSV + tables   |
-| guard pages   |    | MLFQ          |      +----------------+
-+-------+-------+    +---------------+
+| guard pages   |    | MLFQ          |      | overflow track |
+| O(1) PID map  |    +---------------+      +----------------+
++-------+-------+
         |
         v
 +----------------+      +----------------+      +----------------+
@@ -148,33 +153,65 @@ UNLOCK id
   no waiter      -> free
 ```
 
+## Design Decisions
+
+This section documents key engineering decisions and their rationale.
+
+**Deterministic tick engine over real-time scheduling.** MOSRT uses a deterministic tick model rather than wall-clock time. This makes tests, benchmarks, and trace exports perfectly repeatable. The SIGALRM timer only sets a flag; the runtime decides when to check it.
+
+**Guard-page stacks via mmap + mprotect.** Process stacks are allocated with `mmap(MAP_PRIVATE|MAP_ANONYMOUS)` and protected with a guard page at the bottom via `mprotect(PROT_NONE)`. Stack overflow causes a `SIGSEGV` rather than silent heap corruption.
+
+**Signal handler only sets a flag.** The SIGALRM handler only writes a `sig_atomic_t` variable — no context switching, no malloc, no stdio. The runtime polls this flag at safe yield points. This avoids all async-signal-safety issues.
+
+**Binary heap for priority scheduling.** The priority scheduler uses a min-heap rather than a sorted list. Enqueue is O(log n), dequeue is O(log n). Priority aging is applied externally; the heap is rebuilt when priorities change.
+
+**O(1) PID-to-slot mapping.** PIDs are sequential integers starting from 1. A direct `pid_to_slot[]` array provides O(1) lookup instead of O(n) linear scans, which matters for 1000-process benchmarks.
+
+**Retained PCBs after exit.** `proc_mark_exited()` keeps the PCB allocated (for `ps` and metrics) but releases the stack. `proc_destroy()` fully deallocates the slot. This separation enables post-mortem analysis.
+
+**Table-driven shell dispatch.** Shell commands are dispatched via a `{name, handler}` table rather than a long if-else chain. This makes adding new commands trivial and eliminates a code smell.
+
+**Direct-grant IPC handoff.** When a sender writes to a queue with a waiting receiver, the message is placed in a per-receiver grant slot, preventing message theft by a third process that wakes between the receiver being readied and dispatched.
+
 ## Repository Layout
 
 ```text
 .
+├── LICENSE
 ├── Makefile
 ├── README.md
 ├── .github/workflows/ci.yml
+├── .clang-format
+├── .clang-tidy
+├── .cppcheck-suppressions
 ├── mosrt/
 │   ├── Makefile
 │   ├── src/
 │   │   ├── main.c          # entry point
-│   │   ├── shell.c         # interactive shell
-│   │   ├── runtime.c       # tick engine, dispatch, accounting
-│   │   ├── proc.c          # PCB table and guarded stacks
-│   │   ├── sched.c         # FCFS, RR, Priority, MLFQ
-│   │   ├── workload.c      # deterministic workload parser
-│   │   ├── ipc.c           # bounded message queues
-│   │   ├── sync.c          # semaphores and mutexes
-│   │   ├── timer.c         # SIGALRM safe-preemption flag
-│   │   └── log.c           # trace and CSV export
-│   ├── workloads/          # interactive demo workloads
+│   │   ├── shell.c/.h      # table-driven interactive shell
+│   │   ├── runtime.c/.h    # tick engine, dispatch, accounting
+│   │   ├── proc.c/.h       # PCB table, guarded stacks, O(1) PID map
+│   │   ├── sched.c/.h      # FCFS, RR, Priority, MLFQ
+│   │   ├── workload.c/.h   # deterministic workload parser
+│   │   ├── ipc.c/.h        # bounded message queues
+│   │   ├── sync.c/.h       # semaphores and mutexes
+│   │   ├── timer.c/.h      # SIGALRM safe-preemption flag
+│   │   └── log.c/.h        # trace log, CSV export, overflow tracking
+│   ├── workloads/           # interactive demo workloads
 │   ├── benchmarks/
-│   │   ├── workloads/      # benchmark workload set
-│   │   └── results/        # generated CSV and Markdown tables
-│   ├── tests/              # unit, integration, stress tests
+│   │   ├── workloads/       # benchmark workload set
+│   │   └── results/         # generated CSV and Markdown tables
+│   ├── tests/
+│   │   ├── test_proc.c      # process table + state machine tests
+│   │   ├── test_scheduler.c # all 4 scheduler policies
+│   │   ├── test_ipc_sync.c  # IPC + sync primitives
+│   │   ├── test_workload.c  # parser + error paths
+│   │   ├── test_log.c       # trace log + overflow
+│   │   ├── fuzz_workload.c  # deterministic fuzz harness
+│   │   ├── integration.sh   # shell-driven IPC test
+│   │   └── stress.sh        # 100-process MLFQ stress test
 │   └── tools/
-│       └── mosrt_bench.c   # benchmark runner
+│       └── mosrt_bench.c    # benchmark runner
 ```
 
 ## Build Instructions
@@ -184,22 +221,29 @@ Requirements:
 - Linux
 - GCC or Clang
 - POSIX libc with `ucontext`
-- Optional quality tools: `clang-format`, `clang-tidy`, `cppcheck`, `gcov`
+- Optional quality tools: `clang-format`, `clang-tidy`, `cppcheck`, `gcov`, `valgrind`
 
 ```bash
-make
-make test
-make bench
+make            # default build (with -Werror)
+make test       # unit + integration + stress
+make bench      # scheduler comparison benchmarks
 ```
 
-Useful quality targets:
+Build profiles:
 
 ```bash
-make format-check
-make cppcheck
-make tidy
-make sanitize
-make coverage
+make debug      # -O0, -DDEBUG, assertions enabled
+make release    # -O3, -DNDEBUG
+```
+
+Quality targets:
+
+```bash
+make format-check   # clang-format dry run
+make cppcheck       # static analysis
+make tidy           # clang-tidy
+make sanitize       # ASan + UBSan build and test
+make coverage       # gcov coverage build
 ```
 
 ## Running Instructions
@@ -224,6 +268,7 @@ mosrt> ps
 mosrt> metrics
 mosrt> export trace trace.csv
 mosrt> export metrics metrics.csv
+mosrt> reset
 mosrt> exit
 ```
 
@@ -235,11 +280,11 @@ mosrt> exit
 | `run <workload> [priority]` | create a process from a workload |
 | `ps` | dump PCB table |
 | `kill <pid>` | terminate a process |
-| `sched <fcfs|rr|prio|mlfq>` | switch scheduler |
+| `sched <fcfs\|rr\|prio\|mlfq>` | switch scheduler |
 | `quantum <ticks>` | set RR/MLFQ quantum |
 | `nice <pid> <nice>` | adjust process nice value |
 | `prio <pid> <priority>` | set dynamic/base priority |
-| `trace <pid|all>` | enable trace output |
+| `trace <pid\|all>` | enable trace output |
 | `start` | start runtime/timer |
 | `stop` | stop runtime/timer |
 | `step <n>` | advance deterministic ticks |
@@ -248,6 +293,7 @@ mosrt> exit
 | `export trace <path.csv>` | export trace timeline |
 | `export metrics <path.csv>` | export per-process metrics |
 | `bench` | run built-in scheduler comparison |
+| `reset` | reinitialize runtime without exiting |
 | `exit` | leave shell |
 
 ## Example Workloads
@@ -324,7 +370,7 @@ Outputs:
 
 ## Implementation Details
 
-- C17 with strict warnings.
+- C17 with strict warnings (`-Wall -Wextra -Wpedantic -Werror`).
 - No async context switching inside signal handlers.
 - SIGALRM handler only sets a `sig_atomic_t` reschedule flag.
 - Process stacks are allocated with `mmap` and protected by guard pages.
@@ -332,17 +378,22 @@ Outputs:
 - Ready queues use ring-buffer storage to avoid per-tick heap allocation.
 - Priority scheduling uses a binary heap and periodic aging.
 - MLFQ uses multiple FIFO queues with demotion and global priority boost.
+- O(1) PID-to-slot lookup via direct-mapped array.
 - Workload execution is deterministic, which makes tests and benchmarks repeatable.
-- CSV exports are generated for trace timelines, per-process metrics, and scheduler comparisons.
+- CSV exports properly quote detail fields for standards compliance.
+- Trace log tracks overflow count for observability.
+- Shell uses table-driven command dispatch for extensibility.
 
 ## Testing
 
 ```text
 make test
   unit:
-    test_ipc_sync
-    test_workload
-    test_scheduler
+    test_proc           # process table, state machine, lifecycle
+    test_scheduler      # FCFS, RR, Priority, MLFQ policies
+    test_ipc_sync       # message queues, semaphores, mutexes
+    test_workload       # parser, error paths, edge cases
+    test_log            # trace events, overflow, CSV export
   integration:
     shell-driven producer/consumer run
   stress:
@@ -355,31 +406,58 @@ make coverage
   gcov-compatible coverage build
 ```
 
+### Fuzz Testing
+
+```bash
+cd mosrt
+make tests/fuzz_workload
+./tests/fuzz_workload 10000        # 10k iterations
+./tests/fuzz_workload 10000 42     # with seed
+```
+
 ## CI
 
 GitHub Actions runs:
 
-- build
-- unit/integration/stress tests
-- benchmarks
+- Build with `-Werror`
+- Unit / integration / stress tests
+- Benchmarks (artifacts uploaded)
 - clang-format check
 - cppcheck
 - clang-tidy
-- sanitizers
-- coverage build
+- ASan + UBSan
+- Valgrind leak checking
+- Coverage build
 
-## Screenshots Placeholders
+## Contributing
 
-```text
-docs/screenshots/shell-demo.png
-docs/screenshots/trace-export.png
-docs/screenshots/benchmark-table.png
-docs/screenshots/queue-visualization.png
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-improvement`
+3. Ensure `make test && make sanitize` pass
+4. Run `make format` before committing
+5. Open a pull request with a clear description
+
+### Developer Quick Start
+
+```bash
+git clone <repo-url>
+cd mosrt/mosrt
+make debug          # build with debug symbols and assertions
+make unit           # run unit tests only
+make sanitize       # full sanitizer check
 ```
+
+### Code Style
+
+- LLVM-based formatting via `.clang-format`
+- 4-space indentation, 100-column limit
+- Include headers in sorted order
+- All public functions documented in headers
+- All magic numbers named as `#define` constants
 
 ## Resume Bullet
 
-Built MOSRT, a C17 userspace operating-system runtime implementing guarded-stack green processes, deterministic workload execution, FCFS/RR/Priority/MLFQ schedulers, SIGALRM-safe preemption, blocking IPC, semaphores, mutexes, tracing, metrics, CSV/Markdown benchmarks, stress tests, sanitizers, and CI quality gates.
+Built MOSRT, a C17 userspace operating-system runtime implementing guarded-stack green processes, deterministic workload execution, FCFS/RR/Priority/MLFQ schedulers, SIGALRM-safe preemption, blocking IPC, semaphores, mutexes, tracing, metrics, CSV/Markdown benchmarks, fuzz harness, stress tests, sanitizers, and CI quality gates.
 
 ## Future Work
 
@@ -403,6 +481,7 @@ Production polish:
 
 - richer benchmark visualizations
 - trace viewer
-- fuzzing harness
 - code coverage badges
 - manpage-style CLI documentation
+- deadlock detection for mutexes
+- priority inheritance protocol

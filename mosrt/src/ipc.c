@@ -124,7 +124,6 @@ ipc_result_t ipc_send(int qid, int sender_pid, int value) {
 }
 
 ipc_result_t ipc_recv(int qid, int receiver_pid, ipc_message_t *out) {
-    (void)receiver_pid;
     ipc_queue_t *q = find_queue(qid);
     if (q == NULL && !ipc_create_queue(qid)) {
         return IPC_ERROR;

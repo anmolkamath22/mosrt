@@ -18,6 +18,7 @@ typedef struct {
 typedef struct {
     trace_event_t events[MOSRT_MAX_TRACE_EVENTS];
     size_t count;
+    size_t overflow;
     bool enabled_all;
     int enabled_pid;
 } trace_log_t;

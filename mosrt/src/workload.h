@@ -15,6 +15,9 @@ typedef enum {
     WORKLOAD_SEM_POST,
     WORKLOAD_LOCK,
     WORKLOAD_UNLOCK,
+    WORKLOAD_MMAP,
+    WORKLOAD_ACCESS,
+    WORKLOAD_MFREE,
     WORKLOAD_EXIT
 } workload_op_t;
 

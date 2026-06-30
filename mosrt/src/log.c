@@ -31,6 +31,8 @@ void trace_event(trace_log_t *log, uint64_t tick, int pid, const char *event, co
         e->pid = pid;
         snprintf(e->event, sizeof(e->event), "%s", event);
         snprintf(e->detail, sizeof(e->detail), "%s", detail == NULL ? "" : detail);
+    } else {
+        ++log->overflow;
     }
     if (log->enabled_all || log->enabled_pid == pid) {
         printf("[tick=%" PRIu64 "] pid=%d %-10s %s\n", tick, pid, event, detail == NULL ? "" : detail);
@@ -48,7 +50,10 @@ int trace_export_csv(const trace_log_t *log, const char *path) {
     fprintf(fp, "tick,pid,event,detail\n");
     for (size_t i = 0; i < log->count; ++i) {
         const trace_event_t *e = &log->events[i];
-        fprintf(fp, "%" PRIu64 ",%d,%s,%s\n", e->tick, e->pid, e->event, e->detail);
+        fprintf(fp, "%" PRIu64 ",%d,%s,\"%s\"\n", e->tick, e->pid, e->event, e->detail);
+    }
+    if (log->overflow > 0U) {
+        fprintf(fp, "# %zu trace events dropped due to buffer overflow\n", log->overflow);
     }
     fclose(fp);
     return 0;
