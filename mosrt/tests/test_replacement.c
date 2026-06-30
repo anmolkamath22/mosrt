@@ -1,7 +1,7 @@
+#include "page_table.h"
+#include "replacement.h"
 #include <assert.h>
 #include <stdio.h>
-#include "replacement.h"
-#include "page_table.h"
 
 static void test_fifo_policy(void) {
     void *state = NULL;
@@ -65,7 +65,7 @@ static void test_clock_policy(void) {
     page_table_t pt;
     page_table_init(&pt);
 
-    /* Let's mock a simple global frame mapping. 
+    /* Let's mock a simple global frame mapping.
      * PFN 0 -> VPN 10 (owner)
      * PFN 1 -> VPN 11
      * PFN 2 -> VPN 12

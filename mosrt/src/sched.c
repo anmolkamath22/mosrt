@@ -144,11 +144,16 @@ sched_algo_t sched_algo(const scheduler_t *sched) {
 
 const char *sched_algo_name(sched_algo_t algo) {
     switch (algo) {
-        case SCHED_FCFS: return "fcfs";
-        case SCHED_RR: return "rr";
-        case SCHED_PRIO: return "prio";
-        case SCHED_MLFQ: return "mlfq";
-        default: return "unknown";
+    case SCHED_FCFS:
+        return "fcfs";
+    case SCHED_RR:
+        return "rr";
+    case SCHED_PRIO:
+        return "prio";
+    case SCHED_MLFQ:
+        return "mlfq";
+    default:
+        return "unknown";
     }
 }
 
@@ -179,8 +184,10 @@ bool sched_enqueue(scheduler_t *sched, int pid) {
     }
     if (sched->algo == SCHED_MLFQ) {
         pcb_t *p = proc_get(pid);
-        unsigned level = p->mlfq_level >= MOSRT_MLFQ_LEVELS ? MOSRT_MLFQ_LEVELS - 1U : p->mlfq_level;
-        return queue_push(sched->mlfq[level], &sched->mlfq_head[level], &sched->mlfq_len[level], pid);
+        unsigned level =
+            p->mlfq_level >= MOSRT_MLFQ_LEVELS ? MOSRT_MLFQ_LEVELS - 1U : p->mlfq_level;
+        return queue_push(sched->mlfq[level], &sched->mlfq_head[level], &sched->mlfq_len[level],
+                          pid);
     }
     return queue_push(sched->rr, &sched->rr_head, &sched->rr_len, pid);
 }
@@ -232,8 +239,8 @@ bool sched_should_preempt(const scheduler_t *sched, int current_pid) {
 
 static void age_one(pcb_t *p, void *ctx) {
     uint64_t now_tick = *(uint64_t *)ctx;
-    if (p->state == PROC_READY && p->priority > MOSRT_MIN_PRIO &&
-        now_tick > p->last_ready_tick && (now_tick - p->last_ready_tick) % AGING_INTERVAL == 0U) {
+    if (p->state == PROC_READY && p->priority > MOSRT_MIN_PRIO && now_tick > p->last_ready_tick &&
+        (now_tick - p->last_ready_tick) % AGING_INTERVAL == 0U) {
         --p->priority;
     }
 }
@@ -274,8 +281,8 @@ void sched_dump(const scheduler_t *sched, FILE *out) {
     if (sched == NULL) {
         return;
     }
-    fprintf(out, "scheduler=%s quantum=%u current=%d\n",
-            sched_algo_name(sched->algo), sched->quantum_ticks, sched->current_pid);
+    fprintf(out, "scheduler=%s quantum=%u current=%d\n", sched_algo_name(sched->algo),
+            sched->quantum_ticks, sched->current_pid);
     if (sched->algo == SCHED_MLFQ) {
         for (unsigned q = 0U; q < MOSRT_MLFQ_LEVELS; ++q) {
             fprintf(out, "Q%u:", q);

@@ -8,11 +8,7 @@
 #define MOSRT_MSG_CAPACITY 16
 #define MOSRT_WAITQ_CAPACITY 128
 
-typedef enum {
-    IPC_OK = 0,
-    IPC_WOULD_BLOCK,
-    IPC_ERROR
-} ipc_result_t;
+typedef enum { IPC_OK = 0, IPC_WOULD_BLOCK, IPC_ERROR } ipc_result_t;
 
 typedef struct {
     int sender_pid;

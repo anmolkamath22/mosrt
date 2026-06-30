@@ -1,11 +1,11 @@
+#include "frame.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include "frame.h"
 
 static void test_frame_alloc_and_free(void) {
     frame_init();
-    
+
     frame_stats_t stats = frame_get_stats();
     assert(stats.allocated_frames == 0);
     assert(stats.free_frames == VM_NUM_FRAMES);
@@ -14,7 +14,7 @@ static void test_frame_alloc_and_free(void) {
     int f1 = frame_alloc(42, 5);
     assert(f1 >= 0);
     assert(f1 < (int)VM_NUM_FRAMES);
-    
+
     stats = frame_get_stats();
     assert(stats.allocated_frames == 1);
     assert(stats.free_frames == VM_NUM_FRAMES - 1);

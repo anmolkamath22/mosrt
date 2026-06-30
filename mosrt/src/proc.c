@@ -41,8 +41,7 @@ static void *stack_alloc(size_t usable_size, size_t *mapped_size) {
         return NULL;
     }
     size_t total = usable_rounded + guard;
-    void *mapping = mmap(NULL, total, PROT_READ | PROT_WRITE,
-                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void *mapping = mmap(NULL, total, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mapping == MAP_FAILED) {
         *mapped_size = 0U;
         return NULL;
@@ -87,8 +86,8 @@ static int find_free_slot(void) {
 static int find_slot_by_pid(int pid) {
     if (pid >= 1 && pid < g_ptable.next_pid && pid <= MOSRT_MAX_PROCS) {
         int slot = g_ptable.pid_to_slot[pid - 1];
-        if (slot >= 0 && slot < MOSRT_MAX_PROCS &&
-            g_ptable.entries[slot].used && g_ptable.entries[slot].pid == pid) {
+        if (slot >= 0 && slot < MOSRT_MAX_PROCS && g_ptable.entries[slot].used &&
+            g_ptable.entries[slot].pid == pid) {
             return slot;
         }
     }
@@ -177,18 +176,17 @@ const pcb_t *proc_get_const(int pid) {
 
 bool proc_is_valid_transition(proc_state_t from, proc_state_t to) {
     switch (from) {
-        case PROC_NEW:
-            return to == PROC_READY || to == PROC_EXITED;
-        case PROC_READY:
-            return to == PROC_RUNNING || to == PROC_EXITED;
-        case PROC_RUNNING:
-            return to == PROC_READY || to == PROC_BLOCKED || to == PROC_EXITED;
-        case PROC_BLOCKED:
-            return to == PROC_READY || to == PROC_EXITED;
-        case PROC_EXITED:
-            return false;
-        default:
-            return false;
+    case PROC_NEW:
+        return to == PROC_READY || to == PROC_EXITED;
+    case PROC_READY:
+        return to == PROC_RUNNING || to == PROC_EXITED;
+    case PROC_RUNNING:
+        return to == PROC_READY || to == PROC_BLOCKED || to == PROC_EXITED;
+    case PROC_BLOCKED:
+        return to == PROC_READY || to == PROC_EXITED;
+    case PROC_EXITED:
+    default:
+        return false;
     }
 }
 
@@ -273,18 +271,18 @@ int proc_live_count(void) {
 
 const char *proc_state_to_string(proc_state_t state) {
     switch (state) {
-        case PROC_NEW:
-            return "NEW";
-        case PROC_READY:
-            return "READY";
-        case PROC_RUNNING:
-            return "RUNNING";
-        case PROC_BLOCKED:
-            return "BLOCKED";
-        case PROC_EXITED:
-            return "EXITED";
-        default:
-            return "UNKNOWN";
+    case PROC_NEW:
+        return "NEW";
+    case PROC_READY:
+        return "READY";
+    case PROC_RUNNING:
+        return "RUNNING";
+    case PROC_BLOCKED:
+        return "BLOCKED";
+    case PROC_EXITED:
+        return "EXITED";
+    default:
+        return "UNKNOWN";
     }
 }
 
@@ -300,14 +298,8 @@ void proc_dump(FILE *out) {
             continue;
         }
 
-        fprintf(out,
-                "%3d %4d %-8s %4d %1u %3" PRIu64 " %4" PRIu64 " ",
-                p->pid,
-                p->ppid,
-                proc_state_to_string(p->state),
-                p->priority,
-                p->mlfq_level,
-                p->cpu_time,
+        fprintf(out, "%3d %4d %-8s %4d %1u %3" PRIu64 " %4" PRIu64 " ", p->pid, p->ppid,
+                proc_state_to_string(p->state), p->priority, p->mlfq_level, p->cpu_time,
                 p->wait_time);
 
         if (p->response_time == UINT64_MAX) {
@@ -316,11 +308,8 @@ void proc_dump(FILE *out) {
             fprintf(out, "%4" PRIu64 " ", p->response_time);
         }
 
-        fprintf(out, "%5" PRIu64 " %6" PRIu64 " %4" PRIu64 " %4d\n",
-                p->start_tick,
-                p->finish_tick,
-                p->wakeup_tick,
-                p->exit_code);
+        fprintf(out, "%5" PRIu64 " %6" PRIu64 " %4" PRIu64 " %4d\n", p->start_tick, p->finish_tick,
+                p->wakeup_tick, p->exit_code);
     }
 }
 

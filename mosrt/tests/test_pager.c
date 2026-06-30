@@ -1,11 +1,11 @@
-#include <assert.h>
-#include <stdio.h>
-#include "vm.h"
 #include "frame.h"
-#include "tlb.h"
-#include "swap.h"
 #include "pager.h"
 #include "proc.h"
+#include "swap.h"
+#include "tlb.h"
+#include "vm.h"
+#include <assert.h>
+#include <stdio.h>
 
 static void test_demand_paging(void) {
     proc_table_init();
@@ -59,7 +59,7 @@ static void test_eviction_and_swap(void) {
     /* Make sure page table has permissions mapped for all pages we will access.
      * We will access VPN 64 to VPN 130. All are in the HEAP segment, so they
      * already have permissions set to RW. */
-    
+
     pager_reset_stats();
     swap_reset_stats();
 
@@ -67,7 +67,7 @@ static void test_eviction_and_swap(void) {
     for (int i = 0; i < 64; ++i) {
         uint16_t addr = (uint16_t)((64 + i) * VM_PAGE_SIZE);
         uint8_t val = (uint8_t)i;
-        int status = vm_write_mem(pid, vm, addr, &val, 1, (uint64_t)(i + 1));
+        int status = vm_write_mem(pid, vm, addr, &val, 1, (uint64_t)i + 1U);
         assert(status == 1);
     }
 
@@ -75,7 +75,7 @@ static void test_eviction_and_swap(void) {
     assert(p_stats.minor_faults == 64);
     assert(p_stats.evictions == 0);
 
-    /* Access one more page (VPN 128, address 128 * 256). 
+    /* Access one more page (VPN 128, address 128 * 256).
      * This must trigger an eviction! Since we used FIFO policy, the first page
      * accessed (VPN 64) should be evicted. Since we wrote to VPN 64, it's dirty,
      * so it must be swapped out! */
@@ -86,7 +86,7 @@ static void test_eviction_and_swap(void) {
 
     p_stats = pager_get_stats();
     assert(p_stats.evictions == 1);
-    
+
     swap_stats_t s_stats = swap_get_stats();
     assert(s_stats.swap_outs == 1);
 
@@ -96,7 +96,7 @@ static void test_eviction_and_swap(void) {
     assert(!pte->present);
     assert(pte->in_swap);
 
-    /* Access VPN 64 again. This should trigger a MAJOR fault, 
+    /* Access VPN 64 again. This should trigger a MAJOR fault,
      * causing page-in from swap space! */
     uint16_t addr_swap_in = 64 * VM_PAGE_SIZE;
     uint8_t read_val = 0;
@@ -106,7 +106,7 @@ static void test_eviction_and_swap(void) {
 
     p_stats = pager_get_stats();
     assert(p_stats.major_faults == 1);
-    
+
     s_stats = swap_get_stats();
     assert(s_stats.swap_ins == 1);
 

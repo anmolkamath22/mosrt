@@ -41,8 +41,7 @@ static int waitq_peek(const int *waiters, size_t len) {
 static void waitq_remove(int *waiters, size_t *len, int pid) {
     for (size_t i = 0; i < *len; ++i) {
         if (waiters[i] == pid) {
-            memmove(waiters + i, waiters + i + 1,
-                    (*len - i - 1U) * sizeof(waiters[0]));
+            memmove(waiters + i, waiters + i + 1, (*len - i - 1U) * sizeof(waiters[0]));
             --*len;
             return;
         }

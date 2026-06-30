@@ -30,15 +30,16 @@ static void lru_shutdown(void *state) {
 static void lru_update(void *state, uint8_t vpn, uint64_t tick, bool write) {
     (void)write;
     lru_state_t *s = state;
-    if (s == NULL) return;
-    
+    if (s == NULL)
+        return;
+
     for (int i = 0; i < s->count; ++i) {
         if (s->pages[i].vpn == vpn) {
             s->pages[i].last_tick = (uint32_t)tick;
             return;
         }
     }
-    
+
     /* If not found (should be inserted already, but just in case) */
     if (s->count < MAX_LRU_PAGES) {
         s->pages[s->count].vpn = vpn;
@@ -53,12 +54,13 @@ static void lru_insert(void *state, uint8_t vpn, uint64_t tick) {
 
 static void lru_remove(void *state, uint8_t vpn) {
     lru_state_t *s = state;
-    if (s == NULL) return;
-    
+    if (s == NULL)
+        return;
+
     for (int i = 0; i < s->count; ++i) {
         if (s->pages[i].vpn == vpn) {
             for (int j = i; j < s->count - 1; ++j) {
-                s->pages[j] = s->pages[j+1];
+                s->pages[j] = s->pages[j + 1];
             }
             s->count--;
             break;
@@ -69,26 +71,27 @@ static void lru_remove(void *state, uint8_t vpn) {
 static int lru_evict(void *state, const void *page_table_ptr) {
     (void)page_table_ptr;
     lru_state_t *s = state;
-    if (s == NULL || s->count == 0) return -1;
-    
+    if (s == NULL || s->count == 0)
+        return -1;
+
     int lru_idx = 0;
     uint32_t min_tick = s->pages[0].last_tick;
-    
+
     for (int i = 1; i < s->count; ++i) {
         if (s->pages[i].last_tick < min_tick) {
             min_tick = s->pages[i].last_tick;
             lru_idx = i;
         }
     }
-    
+
     int evicted_vpn = s->pages[lru_idx].vpn;
-    
+
     /* Remove from list */
     for (int j = lru_idx; j < s->count - 1; ++j) {
-        s->pages[j] = s->pages[j+1];
+        s->pages[j] = s->pages[j + 1];
     }
     s->count--;
-    
+
     return evicted_vpn;
 }
 

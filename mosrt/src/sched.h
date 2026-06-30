@@ -10,12 +10,7 @@
 
 #define MOSRT_MLFQ_LEVELS 4
 
-typedef enum {
-    SCHED_FCFS = 0,
-    SCHED_RR,
-    SCHED_PRIO,
-    SCHED_MLFQ
-} sched_algo_t;
+typedef enum { SCHED_FCFS = 0, SCHED_RR, SCHED_PRIO, SCHED_MLFQ } sched_algo_t;
 
 typedef struct scheduler scheduler_t;
 

@@ -73,17 +73,19 @@ static int run_case(FILE *csv, FILE *md, const bench_case_t *c, sched_algo_t alg
     proc_for_each(collect_one, &m);
     uint64_t total_ticks = rt.busy_ticks + rt.idle_ticks;
     double util = total_ticks == 0U ? 0.0 : 100.0 * (double)rt.busy_ticks / (double)total_ticks;
-    double throughput = runtime_tick(&rt) == 0U ? 0.0 : (double)m.completed / (double)runtime_tick(&rt);
-    double avg_turnaround = m.completed == 0U ? 0.0 : (double)m.turnaround_sum / (double)m.completed;
+    double throughput =
+        runtime_tick(&rt) == 0U ? 0.0 : (double)m.completed / (double)runtime_tick(&rt);
+    double avg_turnaround =
+        m.completed == 0U ? 0.0 : (double)m.turnaround_sum / (double)m.completed;
     double avg_wait = m.completed == 0U ? 0.0 : (double)m.wait_sum / (double)m.completed;
     double avg_response = m.completed == 0U ? 0.0 : (double)m.response_sum / (double)m.completed;
 
-    fprintf(csv, "%s,%s,%u,%" PRIu64 ",%u,%.2f,%.6f,%.2f,%.2f,%.2f\n",
-            c->name, sched_algo_name(algo), c->processes, runtime_tick(&rt),
-            m.completed, util, throughput, avg_turnaround, avg_wait, avg_response);
-    fprintf(md, "| %s | %s | %u | %" PRIu64 " | %u | %.2f | %.6f | %.2f | %.2f | %.2f |\n",
-            c->name, sched_algo_name(algo), c->processes, runtime_tick(&rt),
-            m.completed, util, throughput, avg_turnaround, avg_wait, avg_response);
+    fprintf(csv, "%s,%s,%u,%" PRIu64 ",%u,%.2f,%.6f,%.2f,%.2f,%.2f\n", c->name,
+            sched_algo_name(algo), c->processes, runtime_tick(&rt), m.completed, util, throughput,
+            avg_turnaround, avg_wait, avg_response);
+    fprintf(md, "| %s | %s | %u | %" PRIu64 " | %u | %.2f | %.6f | %.2f | %.2f | %.2f |\n", c->name,
+            sched_algo_name(algo), c->processes, runtime_tick(&rt), m.completed, util, throughput,
+            avg_turnaround, avg_wait, avg_response);
 
     runtime_shutdown(&rt);
     return 0;
@@ -105,9 +107,11 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    fprintf(csv, "scenario,scheduler,processes,ticks,completed,cpu_util,throughput,avg_turnaround,avg_wait,avg_response\n");
+    fprintf(csv, "scenario,scheduler,processes,ticks,completed,cpu_util,throughput,avg_turnaround,"
+                 "avg_wait,avg_response\n");
     fprintf(md, "# MOSRT Scheduler Benchmark Results\n\n");
-    fprintf(md, "| Scenario | Scheduler | Processes | Ticks | Completed | CPU Util %% | Throughput | Avg Turnaround | Avg Wait | Avg Response |\n");
+    fprintf(md, "| Scenario | Scheduler | Processes | Ticks | Completed | CPU Util %% | Throughput "
+                "| Avg Turnaround | Avg Wait | Avg Response |\n");
     fprintf(md, "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n");
 
     int rc = 0;

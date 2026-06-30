@@ -6,19 +6,19 @@
 
 #include "ipc.h"
 #include "log.h"
+#include "pager.h"
 #include "proc.h"
 #include "sync.h"
 #include "timer.h"
-#include "workload.h"
-#include "vm.h"
 #include "tlb.h"
-#include "pager.h"
+#include "vm.h"
+#include "workload.h"
 
-#define MLFQ_BOOST_INTERVAL  50U
-#define DEFAULT_QUANTUM      10U
-#define MAX_DISPATCH_GUARD   1024U
-#define BENCH_MAX_TICKS      500U
-#define ERR_BUF_SIZE         160
+#define MLFQ_BOOST_INTERVAL 50U
+#define DEFAULT_QUANTUM 10U
+#define MAX_DISPATCH_GUARD 1024U
+#define BENCH_MAX_TICKS 500U
+#define ERR_BUF_SIZE 160
 
 static runtime_t *g_context_runtime;
 
@@ -46,8 +46,7 @@ static int g_slot_by_pid[MOSRT_MAX_PROCS];
 static int slot_index(const runtime_t *rt, int pid) {
     if (pid >= 1 && pid <= MOSRT_MAX_PROCS) {
         int idx = g_slot_by_pid[pid - 1];
-        if (idx >= 0 && idx < MOSRT_MAX_PROCS && rt->slots[idx].used &&
-            rt->slots[idx].pid == pid) {
+        if (idx >= 0 && idx < MOSRT_MAX_PROCS && rt->slots[idx].used && rt->slots[idx].pid == pid) {
             return idx;
         }
     }
@@ -167,8 +166,8 @@ static void maybe_preempt(runtime_t *rt) {
     if (pid < 0) {
         return;
     }
-    bool preempt = rt->need_resched || timer_need_resched() ||
-                   sched_should_preempt(&rt->scheduler, pid);
+    bool preempt =
+        rt->need_resched || timer_need_resched() || sched_should_preempt(&rt->scheduler, pid);
     if (!preempt) {
         return;
     }
@@ -204,210 +203,212 @@ static bool execute_instruction(runtime_t *rt) {
     workload_insn_t *insn = &rt->slots[idx].workload.insns[rt->slots[idx].pc];
     char detail[96];
     switch (insn->op) {
-        case WORKLOAD_CPU:
-            if (rt->slots[idx].remaining == 0U) {
-                rt->slots[idx].remaining = insn->ticks;
-            }
-            pcb_t *p = proc_get(pid);
-            if (p == NULL || rt->slots[idx].remaining == 0U) {
-                exit_current(rt, 1);
-                return false;
-            }
-            proc_for_each(account_ready_wait, NULL);
-            ++p->cpu_time;
-            ++rt->busy_ticks;
-            --rt->slots[idx].remaining;
-            ++rt->tick;
-            sched_on_tick(&rt->scheduler, pid);
-            if (rt->slots[idx].remaining == 0U) {
-                ++rt->slots[idx].pc;
-            }
-            trace_event(&rt->trace, rt->tick, pid, "CPU", "tick");
-            maybe_preempt(rt);
-            return true;
-        case WORKLOAD_IO: {
-            pcb_t *io_p = proc_get(pid);
-            if (io_p == NULL) {
-                exit_current(rt, 1);
-                return false;
-            }
-            io_p->wakeup_tick = rt->tick + insn->ticks;
-            make_detail(detail, sizeof(detail), "until", (int)io_p->wakeup_tick);
-            complete_immediate(rt, idx);
-            block_current(rt, detail);
+    case WORKLOAD_CPU:
+        if (rt->slots[idx].remaining == 0U) {
+            rt->slots[idx].remaining = insn->ticks;
+        }
+        pcb_t *p = proc_get(pid);
+        if (p == NULL || rt->slots[idx].remaining == 0U) {
+            exit_current(rt, 1);
             return false;
         }
-        case WORKLOAD_SEND: {
-            ipc_result_t r = ipc_send(insn->arg0, pid, insn->arg1);
-            if (r == IPC_ERROR) {
-                exit_current(rt, 3);
-                return false;
-            }
-            if (r == IPC_WOULD_BLOCK) {
-                ipc_wait_sender(insn->arg0, pid);
-                block_current(rt, "send full");
-                return false;
-            }
-            int wake = ipc_pop_receiver_waiter(insn->arg0);
-            if (wake >= 0) {
-                wake_pid(rt, wake, "message");
-            }
-            complete_immediate(rt, idx);
+        proc_for_each(account_ready_wait, NULL);
+        ++p->cpu_time;
+        ++rt->busy_ticks;
+        --rt->slots[idx].remaining;
+        ++rt->tick;
+        sched_on_tick(&rt->scheduler, pid);
+        if (rt->slots[idx].remaining == 0U) {
+            ++rt->slots[idx].pc;
+        }
+        trace_event(&rt->trace, rt->tick, pid, "CPU", "tick");
+        maybe_preempt(rt);
+        return true;
+    case WORKLOAD_IO: {
+        pcb_t *io_p = proc_get(pid);
+        if (io_p == NULL) {
+            exit_current(rt, 1);
             return false;
         }
-        case WORKLOAD_RECV: {
-            ipc_message_t msg;
-            ipc_result_t r = ipc_recv(insn->arg0, pid, &msg);
-            if (r == IPC_ERROR) {
-                exit_current(rt, 3);
-                return false;
-            }
-            if (r == IPC_WOULD_BLOCK) {
-                ipc_wait_receiver(insn->arg0, pid);
-                block_current(rt, "recv empty");
-                return false;
-            }
-            int wake = ipc_pop_sender_waiter(insn->arg0);
-            if (wake >= 0) {
-                wake_pid(rt, wake, "queue space");
-            }
-            complete_immediate(rt, idx);
+        io_p->wakeup_tick = rt->tick + insn->ticks;
+        make_detail(detail, sizeof(detail), "until", (int)io_p->wakeup_tick);
+        complete_immediate(rt, idx);
+        block_current(rt, detail);
+        return false;
+    }
+    case WORKLOAD_SEND: {
+        ipc_result_t r = ipc_send(insn->arg0, pid, insn->arg1);
+        if (r == IPC_ERROR) {
+            exit_current(rt, 3);
             return false;
         }
-        case WORKLOAD_SEM_WAIT: {
-            sync_result_t r = sync_wait(insn->arg0, pid);
-            if (r == SYNC_ERROR) {
-                exit_current(rt, 4);
-                return false;
-            }
-            if (r == SYNC_WOULD_BLOCK) {
-                block_current(rt, "sem wait");
-                return false;
-            }
-            complete_immediate(rt, idx);
+        if (r == IPC_WOULD_BLOCK) {
+            ipc_wait_sender(insn->arg0, pid);
+            block_current(rt, "send full");
             return false;
         }
-        case WORKLOAD_SEM_POST: {
-            int wake = -1;
-            if (sync_post(insn->arg0, pid, &wake) == SYNC_ERROR) {
-                exit_current(rt, 4);
-                return false;
-            }
-            if (wake >= 0) {
-                wake_pid(rt, wake, "sem post");
-            }
-            complete_immediate(rt, idx);
+        int wake = ipc_pop_receiver_waiter(insn->arg0);
+        if (wake >= 0) {
+            wake_pid(rt, wake, "message");
+        }
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_RECV: {
+        ipc_message_t msg;
+        ipc_result_t r = ipc_recv(insn->arg0, pid, &msg);
+        if (r == IPC_ERROR) {
+            exit_current(rt, 3);
             return false;
         }
-        case WORKLOAD_LOCK: {
-            sync_result_t r = sync_mutex_lock(insn->arg0, pid);
-            if (r == SYNC_ERROR) {
-                exit_current(rt, 4);
-                return false;
-            }
-            if (r == SYNC_WOULD_BLOCK) {
-                block_current(rt, "mutex lock");
-                return false;
-            }
-            complete_immediate(rt, idx);
+        if (r == IPC_WOULD_BLOCK) {
+            ipc_wait_receiver(insn->arg0, pid);
+            block_current(rt, "recv empty");
             return false;
         }
-        case WORKLOAD_UNLOCK: {
-            int wake = -1;
-            if (sync_mutex_unlock(insn->arg0, pid, &wake) == SYNC_ERROR) {
-                exit_current(rt, 4);
-                return false;
-            }
-            if (wake >= 0) {
-                wake_pid(rt, wake, "mutex unlock");
-            }
-            complete_immediate(rt, idx);
+        int wake = ipc_pop_sender_waiter(insn->arg0);
+        if (wake >= 0) {
+            wake_pid(rt, wake, "queue space");
+        }
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_SEM_WAIT: {
+        sync_result_t r = sync_wait(insn->arg0, pid);
+        if (r == SYNC_ERROR) {
+            exit_current(rt, 4);
             return false;
         }
-        case WORKLOAD_MMAP: {
-            pcb_t *p = proc_get(pid);
-            if (p == NULL || p->vm == NULL) {
-                exit_current(rt, 5);
-                return false;
-            }
-            uint16_t addr = vm_malloc(pid, p->vm, insn->arg0, rt->tick);
-            if (addr == 0) {
-                exit_current(rt, 5);
-                return false;
-            }
-            p->vm_last_alloc = addr;
-            snprintf(detail, sizeof(detail), "size=%d addr=0x%04X", insn->arg0, addr);
-            trace_event(&rt->trace, rt->tick, pid, "MMAP", detail);
-            complete_immediate(rt, idx);
+        if (r == SYNC_WOULD_BLOCK) {
+            block_current(rt, "sem wait");
             return false;
         }
-        case WORKLOAD_ACCESS: {
-            pcb_t *p = proc_get(pid);
-            if (p == NULL || p->vm == NULL) {
-                exit_current(rt, 5);
-                return false;
-            }
-            uint16_t addr = (insn->arg0 < 0) ? (uint16_t)(p->vm_last_alloc - insn->arg0) : (uint16_t)insn->arg0;
-            bool is_write = (insn->arg1 != 0);
-            uint8_t byte_val = 0xAA;
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_SEM_POST: {
+        int wake = -1;
+        if (sync_post(insn->arg0, pid, &wake) == SYNC_ERROR) {
+            exit_current(rt, 4);
+            return false;
+        }
+        if (wake >= 0) {
+            wake_pid(rt, wake, "sem post");
+        }
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_LOCK: {
+        sync_result_t r = sync_mutex_lock(insn->arg0, pid);
+        if (r == SYNC_ERROR) {
+            exit_current(rt, 4);
+            return false;
+        }
+        if (r == SYNC_WOULD_BLOCK) {
+            block_current(rt, "mutex lock");
+            return false;
+        }
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_UNLOCK: {
+        int wake = -1;
+        if (sync_mutex_unlock(insn->arg0, pid, &wake) == SYNC_ERROR) {
+            exit_current(rt, 4);
+            return false;
+        }
+        if (wake >= 0) {
+            wake_pid(rt, wake, "mutex unlock");
+        }
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_MMAP: {
+        pcb_t *p = proc_get(pid);
+        if (p == NULL || p->vm == NULL) {
+            exit_current(rt, 5);
+            return false;
+        }
+        uint16_t addr = vm_malloc(pid, p->vm, insn->arg0, rt->tick);
+        if (addr == 0) {
+            exit_current(rt, 5);
+            return false;
+        }
+        p->vm_last_alloc = addr;
+        snprintf(detail, sizeof(detail), "size=%d addr=0x%04X", insn->arg0, addr);
+        trace_event(&rt->trace, rt->tick, pid, "MMAP", detail);
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_ACCESS: {
+        pcb_t *p = proc_get(pid);
+        if (p == NULL || p->vm == NULL) {
+            exit_current(rt, 5);
+            return false;
+        }
+        uint16_t addr =
+            (insn->arg0 < 0) ? (uint16_t)(p->vm_last_alloc - insn->arg0) : (uint16_t)insn->arg0;
+        bool is_write = (insn->arg1 != 0);
+        uint8_t byte_val = 0xAA;
 
-            tlb_stats_t tlb_before = tlb_get_stats();
-            pager_stats_t pager_before = pager_get_stats();
+        tlb_stats_t tlb_before = tlb_get_stats();
+        pager_stats_t pager_before = pager_get_stats();
 
-            int status;
-            if (is_write) {
-                status = vm_write_mem(pid, p->vm, addr, &byte_val, 1, rt->tick);
-            } else {
-                status = vm_read_mem(pid, p->vm, addr, &byte_val, 1, rt->tick);
-            }
+        int status;
+        if (is_write) {
+            status = vm_write_mem(pid, p->vm, addr, &byte_val, 1, rt->tick);
+        } else {
+            status = vm_read_mem(pid, p->vm, addr, &byte_val, 1, rt->tick);
+        }
 
-            if (status < 0) {
-                exit_current(rt, 6);
-                return false;
-            }
-
-            pager_stats_t pager_after = pager_get_stats();
-            tlb_stats_t tlb_after = tlb_get_stats();
-
-            bool hit_tlb = (tlb_after.hits > tlb_before.hits);
-            bool minor_fault = (pager_after.minor_faults > pager_before.minor_faults);
-            bool major_fault = (pager_after.major_faults > pager_before.major_faults);
-
-            snprintf(detail, sizeof(detail), "%s addr=0x%04X %s",
-                     is_write ? "write" : "read", addr,
-                     hit_tlb ? "TLB-hit" : (minor_fault ? "minor-fault" : (major_fault ? "major-fault" : "page-hit")));
-            trace_event(&rt->trace, rt->tick, pid, "ACCESS", detail);
-
-            if (major_fault) {
-                /* major fault blocks process for simulated disk read latency.
-                 * Do not advance PC (re-execute access instruction). */
-                p->wakeup_tick = rt->tick + VM_PAGE_FAULT_LATENCY;
-                block_current(rt, "page fault");
-                return false;
-            }
-
-            complete_immediate(rt, idx);
+        if (status < 0) {
+            exit_current(rt, 6);
             return false;
         }
-        case WORKLOAD_MFREE: {
-            pcb_t *p = proc_get(pid);
-            if (p == NULL || p->vm == NULL) {
-                exit_current(rt, 5);
-                return false;
-            }
-            vm_free(pid, p->vm, p->vm_last_alloc, rt->tick);
-            snprintf(detail, sizeof(detail), "addr=0x%04X", p->vm_last_alloc);
-            trace_event(&rt->trace, rt->tick, pid, "MFREE", detail);
-            p->vm_last_alloc = 0;
-            complete_immediate(rt, idx);
+
+        pager_stats_t pager_after = pager_get_stats();
+        tlb_stats_t tlb_after = tlb_get_stats();
+
+        bool hit_tlb = (tlb_after.hits > tlb_before.hits);
+        bool minor_fault = (pager_after.minor_faults > pager_before.minor_faults);
+        bool major_fault = (pager_after.major_faults > pager_before.major_faults);
+
+        snprintf(detail, sizeof(detail), "%s addr=0x%04X %s", is_write ? "write" : "read", addr,
+                 hit_tlb
+                     ? "TLB-hit"
+                     : (minor_fault ? "minor-fault" : (major_fault ? "major-fault" : "page-hit")));
+        trace_event(&rt->trace, rt->tick, pid, "ACCESS", detail);
+
+        if (major_fault) {
+            /* major fault blocks process for simulated disk read latency.
+             * Do not advance PC (re-execute access instruction). */
+            p->wakeup_tick = rt->tick + VM_PAGE_FAULT_LATENCY;
+            block_current(rt, "page fault");
             return false;
         }
-        case WORKLOAD_EXIT:
-            exit_current(rt, 0);
+
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_MFREE: {
+        pcb_t *p = proc_get(pid);
+        if (p == NULL || p->vm == NULL) {
+            exit_current(rt, 5);
             return false;
-        default:
-            exit_current(rt, 2);
-            return false;
+        }
+        vm_free(pid, p->vm, p->vm_last_alloc, rt->tick);
+        snprintf(detail, sizeof(detail), "addr=0x%04X", p->vm_last_alloc);
+        trace_event(&rt->trace, rt->tick, pid, "MFREE", detail);
+        p->vm_last_alloc = 0;
+        complete_immediate(rt, idx);
+        return false;
+    }
+    case WORKLOAD_EXIT:
+        exit_current(rt, 0);
+        return false;
+    default:
+        exit_current(rt, 2);
+        return false;
     }
 }
 
@@ -614,10 +615,11 @@ static void collect_metrics(pcb_t *p, void *ctx) {
 static void export_metric_row(pcb_t *p, void *ctx) {
     FILE *out = ctx;
     uint64_t turnaround = p->finish_tick >= p->start_tick ? p->finish_tick - p->start_tick : 0U;
-    fprintf(out, "%d,%s,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%d,%u\n",
+    fprintf(out,
+            "%d,%s,%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%" PRIu64 ",%d,%u\n",
             p->pid, proc_state_to_string(p->state), p->cpu_time, p->wait_time,
-            p->response_time == UINT64_MAX ? 0U : p->response_time, turnaround,
-            p->start_tick, p->finish_tick, p->priority, p->mlfq_level);
+            p->response_time == UINT64_MAX ? 0U : p->response_time, turnaround, p->start_tick,
+            p->finish_tick, p->priority, p->mlfq_level);
 }
 
 void runtime_print_metrics(runtime_t *rt, FILE *out) {
@@ -632,8 +634,8 @@ void runtime_print_metrics(runtime_t *rt, FILE *out) {
     uint64_t total = rt->busy_ticks + rt->idle_ticks;
     double util = total == 0U ? 0.0 : (100.0 * (double)rt->busy_ticks / (double)total);
     double throughput = rt->tick == 0U ? 0.0 : (double)m.completed / (double)rt->tick;
-    fprintf(out, "ticks=%" PRIu64 " completed=%u throughput=%.3f cpu_util=%.2f%%\n",
-            rt->tick, m.completed, throughput, util);
+    fprintf(out, "ticks=%" PRIu64 " completed=%u throughput=%.3f cpu_util=%.2f%%\n", rt->tick,
+            m.completed, throughput, util);
     if (m.completed > 0U) {
         fprintf(out, "avg_turnaround=%.2f avg_wait=%.2f avg_response=%.2f\n",
                 (double)m.turnaround_sum / (double)m.completed,

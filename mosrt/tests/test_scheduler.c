@@ -114,7 +114,7 @@ static void test_rr_fifo_order(void) {
 static void test_fcfs_ordering(void) {
     proc_table_init();
     int p1 = proc_create(0, 10, 0, 0);
-    int p2 = proc_create(0, 5, 0, 0);  /* lower prio but created second */
+    int p2 = proc_create(0, 5, 0, 0); /* lower prio but created second */
     int p3 = proc_create(0, 30, 0, 0);
     assert(proc_set_state(p1, PROC_READY, 0));
     assert(proc_set_state(p2, PROC_READY, 0));

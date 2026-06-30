@@ -1,8 +1,8 @@
-#include <assert.h>
-#include <stdio.h>
+#include "proc.h"
 #include "vm.h"
 #include "vm_alloc.h"
-#include "proc.h"
+#include <assert.h>
+#include <stdio.h>
 
 static void test_heap_allocator(void) {
     proc_table_init();

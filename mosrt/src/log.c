@@ -1,7 +1,7 @@
 #include "log.h"
 
-#include <limits.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -35,7 +35,8 @@ void trace_event(trace_log_t *log, uint64_t tick, int pid, const char *event, co
         ++log->overflow;
     }
     if (log->enabled_all || log->enabled_pid == pid) {
-        printf("[tick=%" PRIu64 "] pid=%d %-10s %s\n", tick, pid, event, detail == NULL ? "" : detail);
+        printf("[tick=%" PRIu64 "] pid=%d %-10s %s\n", tick, pid, event,
+               detail == NULL ? "" : detail);
     }
 }
 
@@ -68,7 +69,6 @@ void trace_dump(const trace_log_t *log, FILE *out) {
     }
     for (size_t i = 0; i < log->count; ++i) {
         const trace_event_t *e = &log->events[i];
-        fprintf(out, "[tick=%" PRIu64 "] pid=%d %-10s %s\n",
-                e->tick, e->pid, e->event, e->detail);
+        fprintf(out, "[tick=%" PRIu64 "] pid=%d %-10s %s\n", e->tick, e->pid, e->event, e->detail);
     }
 }

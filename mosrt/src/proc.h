@@ -1,36 +1,30 @@
 #ifndef MOSRT_PROC_H
 #define MOSRT_PROC_H
 
-#include <stdbool.h> 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <ucontext.h>
 
 #define MOSRT_MAX_PROCS 1024
-#define MOSRT_DEFAULT_STACK_SIZE (64U * 1024U)
+#define MOSRT_DEFAULT_STACK_SIZE ((size_t)64U * 1024U)
 #define MOSRT_MAX_PRIO 39
 #define MOSRT_MIN_PRIO 0
 #define MOSRT_DEFAULT_PRIO 20
 
-typedef enum {
-    PROC_NEW = 0,
-    PROC_READY,
-    PROC_RUNNING,
-    PROC_BLOCKED,
-    PROC_EXITED
-} proc_state_t;
+typedef enum { PROC_NEW = 0, PROC_READY, PROC_RUNNING, PROC_BLOCKED, PROC_EXITED } proc_state_t;
 
 typedef struct {
     bool used;
-    int pid; // process identifier
-    int ppid;// parent process identifier
+    int pid;            // process identifier
+    int ppid;           // parent process identifier
     proc_state_t state; // state
-    int priority; // dynamic priority, lower values run first
+    int priority;       // dynamic priority, lower values run first
     int base_priority;
     int nice;
     unsigned mlfq_level;
-    uint64_t cpu_time; 
+    uint64_t cpu_time;
     uint64_t wait_time;
     uint64_t response_time;
     uint64_t start_tick;

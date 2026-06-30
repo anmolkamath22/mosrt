@@ -1,10 +1,10 @@
 #include "vm.h"
 #include "frame.h"
-#include "tlb.h"
-#include "swap.h"
 #include "pager.h"
-#include "vm_alloc.h"
 #include "proc.h"
+#include "swap.h"
+#include "tlb.h"
+#include "vm_alloc.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -24,23 +24,25 @@ void vm_shutdown(void) {
 
 vm_state_t *vm_proc_init(int pid) {
     vm_state_t *vm = malloc(sizeof(vm_state_t));
-    if (vm == NULL) return NULL;
-    
+    if (vm == NULL)
+        return NULL;
+
     vm->pid = pid;
     page_table_init(&vm->pt);
-    
+
     memset(&vm->stats, 0, sizeof(vm->stats));
     vm->stats.heap_start = VM_SEG_HEAP_START;
     vm->stats.heap_break = VM_SEG_HEAP_START;
     vm->stats.stack_limit = VM_NUM_PAGES - VM_SEG_STACK_MAX_PAGES;
 
     pager_proc_init(pid, &vm->policy_state);
-    
+
     return vm;
 }
 
 void vm_proc_destroy(vm_state_t *vm) {
-    if (vm == NULL) return;
+    if (vm == NULL)
+        return;
 
     /* Free all physical frames allocated to this process */
     for (uint32_t vpn = 0; vpn < VM_NUM_PAGES; ++vpn) {
@@ -59,9 +61,12 @@ void vm_proc_destroy(vm_state_t *vm) {
     free(vm);
 }
 
-int vm_read_mem(int pid, vm_state_t *vm, uint16_t virt_addr, uint8_t *dest, size_t len, uint64_t tick) {
-    if (vm == NULL || dest == NULL) return -1;
-    if ((uint32_t)virt_addr + len > VM_VIRT_ADDR_SPACE_SIZE) return -1;
+int vm_read_mem(int pid, vm_state_t *vm, uint16_t virt_addr, uint8_t *dest, size_t len,
+                uint64_t tick) {
+    if (vm == NULL || dest == NULL)
+        return -1;
+    if ((uint32_t)virt_addr + len > VM_VIRT_ADDR_SPACE_SIZE)
+        return -1;
 
     tlb_stats_t tlb_before = tlb_get_stats();
 
@@ -84,7 +89,8 @@ int vm_read_mem(int pid, vm_state_t *vm, uint16_t virt_addr, uint8_t *dest, size
                 pte->accessed = true;
             }
         } else {
-            pager_result_t res = pager_access_page(pid, &vm->pt, vm->policy_state, vpn, false, tick, &pfn);
+            pager_result_t res =
+                pager_access_page(pid, &vm->pt, vm->policy_state, vpn, false, tick, &pfn);
             if (res == PAGER_ERROR_PERM || res == PAGER_ERROR_OOM || res == PAGER_ERROR_ADDR) {
                 return -1;
             }
@@ -113,9 +119,12 @@ int vm_read_mem(int pid, vm_state_t *vm, uint16_t virt_addr, uint8_t *dest, size
     return (int)len;
 }
 
-int vm_write_mem(int pid, vm_state_t *vm, uint16_t virt_addr, const uint8_t *src, size_t len, uint64_t tick) {
-    if (vm == NULL || src == NULL) return -1;
-    if ((uint32_t)virt_addr + len > VM_VIRT_ADDR_SPACE_SIZE) return -1;
+int vm_write_mem(int pid, vm_state_t *vm, uint16_t virt_addr, const uint8_t *src, size_t len,
+                 uint64_t tick) {
+    if (vm == NULL || src == NULL)
+        return -1;
+    if ((uint32_t)virt_addr + len > VM_VIRT_ADDR_SPACE_SIZE)
+        return -1;
 
     tlb_stats_t tlb_before = tlb_get_stats();
 
@@ -142,7 +151,8 @@ int vm_write_mem(int pid, vm_state_t *vm, uint16_t virt_addr, const uint8_t *src
                 tlb_insert(vpn, (uint8_t)pfn, true, tlb_perm, tick);
             }
         } else {
-            pager_result_t res = pager_access_page(pid, &vm->pt, vm->policy_state, vpn, true, tick, &pfn);
+            pager_result_t res =
+                pager_access_page(pid, &vm->pt, vm->policy_state, vpn, true, tick, &pfn);
             if (res == PAGER_ERROR_PERM || res == PAGER_ERROR_OOM || res == PAGER_ERROR_ADDR) {
                 return -1;
             }
@@ -192,23 +202,33 @@ void vm_free(int pid, vm_state_t *vm, uint16_t addr, uint64_t tick) {
 }
 
 void vm_dump_proc_map(const vm_state_t *vm, FILE *out) {
-    if (vm == NULL || out == NULL) return;
+    if (vm == NULL || out == NULL)
+        return;
     fprintf(out, "Virtual Memory Map for PID %d:\n", vm->pid);
-    fprintf(out, "  %-10s : 0x%04X - 0x%04X\n", "TEXT", VM_SEG_TEXT_START, VM_SEG_TEXT_START + VM_SEG_TEXT_PAGES * VM_PAGE_SIZE - 1);
-    fprintf(out, "  %-10s : 0x%04X - 0x%04X\n", "RODATA", VM_SEG_RODATA_START, VM_SEG_RODATA_START + VM_SEG_RODATA_PAGES * VM_PAGE_SIZE - 1);
-    fprintf(out, "  %-10s : 0x%04X - 0x%04X\n", "DATA", VM_SEG_DATA_START, VM_SEG_DATA_START + VM_SEG_DATA_PAGES * VM_PAGE_SIZE - 1);
-    fprintf(out, "  %-10s : 0x%04X - 0x%04X\n", "BSS", VM_SEG_BSS_START, VM_SEG_BSS_START + VM_SEG_BSS_PAGES * VM_PAGE_SIZE - 1);
-    fprintf(out, "  %-10s : 0x%04X - 0x%04X (max limit: 0x%04X)\n", "HEAP", vm->stats.heap_start, vm->stats.heap_break - 1, vm->stats.heap_start + VM_SEG_HEAP_MAX_PAGES * VM_PAGE_SIZE - 1);
-    fprintf(out, "  %-10s : 0x%04X - 0xFFFF (max limit: 0x%04X)\n", "STACK", vm->stats.stack_limit * VM_PAGE_SIZE, vm->stats.stack_limit * VM_PAGE_SIZE);
+    fprintf(out, "  %-10s : 0x%04X - 0x%04X\n", "TEXT", VM_SEG_TEXT_START,
+            VM_SEG_TEXT_START + VM_SEG_TEXT_PAGES * VM_PAGE_SIZE - 1);
+    fprintf(out, "  %-10s : 0x%04X - 0x%04X\n", "RODATA", VM_SEG_RODATA_START,
+            VM_SEG_RODATA_START + VM_SEG_RODATA_PAGES * VM_PAGE_SIZE - 1);
+    fprintf(out, "  %-10s : 0x%04X - 0x%04X\n", "DATA", VM_SEG_DATA_START,
+            VM_SEG_DATA_START + VM_SEG_DATA_PAGES * VM_PAGE_SIZE - 1);
+    fprintf(out, "  %-10s : 0x%04X - 0x%04X\n", "BSS", VM_SEG_BSS_START,
+            VM_SEG_BSS_START + VM_SEG_BSS_PAGES * VM_PAGE_SIZE - 1);
+    fprintf(out, "  %-10s : 0x%04X - 0x%04X (max limit: 0x%04X)\n", "HEAP", vm->stats.heap_start,
+            vm->stats.heap_break - 1,
+            vm->stats.heap_start + VM_SEG_HEAP_MAX_PAGES * VM_PAGE_SIZE - 1);
+    fprintf(out, "  %-10s : 0x%04X - 0xFFFF (max limit: 0x%04X)\n", "STACK",
+            vm->stats.stack_limit * VM_PAGE_SIZE, vm->stats.stack_limit * VM_PAGE_SIZE);
 }
 
 void vm_dump_proc_pte(const vm_state_t *vm, FILE *out) {
-    if (vm == NULL || out == NULL) return;
+    if (vm == NULL || out == NULL)
+        return;
     page_table_dump(&vm->pt, out);
 }
 
 void vm_dump_global_frames(FILE *out) {
-    if (out == NULL) out = stdout;
+    if (out == NULL)
+        out = stdout;
     frame_stats_t stats = frame_get_stats();
     fprintf(out, "Physical Frame Allocator Stats:\n");
     fprintf(out, "  Allocated frames : %u / %u\n", stats.allocated_frames, VM_NUM_FRAMES);
@@ -229,7 +249,8 @@ void vm_dump_global_tlb(FILE *out) {
 }
 
 void vm_dump_global_faults(FILE *out) {
-    if (out == NULL) out = stdout;
+    if (out == NULL)
+        out = stdout;
     pager_stats_t p_stats = pager_get_stats();
     swap_stats_t s_stats = swap_get_stats();
     fprintf(out, "Global Paging & Fault Stats:\n");

@@ -7,22 +7,18 @@
 #define MOSRT_MAX_SEMAPHORES 32
 #define MOSRT_SYNC_WAITERS 128
 
-typedef enum {
-    SYNC_OK = 0,
-    SYNC_WOULD_BLOCK,
-    SYNC_ERROR
-} sync_result_t;
+typedef enum { SYNC_OK = 0, SYNC_WOULD_BLOCK, SYNC_ERROR } sync_result_t;
 
 typedef struct {
-    bool used;
+    size_t waiters_len;
+    size_t grants_len;
     int id;
     int count;
     int owner_pid;
-    bool mutex;
     int waiters[MOSRT_SYNC_WAITERS];
-    size_t waiters_len;
     int grants[MOSRT_SYNC_WAITERS];
-    size_t grants_len;
+    bool used;
+    bool mutex;
 } mosrt_sem_t;
 
 /** Initialize semaphore and mutex tables. */

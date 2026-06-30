@@ -7,12 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int is_space(unsigned char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+}
+
 static char *trim(char *s) {
-    while (isspace((unsigned char)*s)) {
+    while (is_space((unsigned char)*s)) {
         ++s;
     }
     char *end = s + strlen(s);
-    while (end > s && isspace((unsigned char)end[-1])) {
+    while (end > s && is_space((unsigned char)end[-1])) {
         *--end = '\0';
     }
     return s;
@@ -88,6 +92,10 @@ int workload_load(const char *path, workload_t *out, char *err, size_t errsz) {
             return -1;
         }
 
+        if (argc == 0) {
+            continue;
+        }
+
         workload_insn_t insn = {0};
         if (strcmp(argv[0], "CPU") == 0 && argc == 2 && parse_u64(argv[1], &insn.ticks)) {
             if (insn.ticks == 0U) {
@@ -103,13 +111,16 @@ int workload_load(const char *path, workload_t *out, char *err, size_t errsz) {
                 return -1;
             }
             insn.op = WORKLOAD_IO;
-        } else if (strcmp(argv[0], "SEND") == 0 && argc == 3 && parse_i32(argv[1], &insn.arg0) && parse_i32(argv[2], &insn.arg1)) {
+        } else if (strcmp(argv[0], "SEND") == 0 && argc == 3 && parse_i32(argv[1], &insn.arg0) &&
+                   parse_i32(argv[2], &insn.arg1)) {
             insn.op = WORKLOAD_SEND;
         } else if (strcmp(argv[0], "RECV") == 0 && argc == 2 && parse_i32(argv[1], &insn.arg0)) {
             insn.op = WORKLOAD_RECV;
-        } else if (strcmp(argv[0], "SEM_WAIT") == 0 && argc == 2 && parse_i32(argv[1], &insn.arg0)) {
+        } else if (strcmp(argv[0], "SEM_WAIT") == 0 && argc == 2 &&
+                   parse_i32(argv[1], &insn.arg0)) {
             insn.op = WORKLOAD_SEM_WAIT;
-        } else if (strcmp(argv[0], "SEM_POST") == 0 && argc == 2 && parse_i32(argv[1], &insn.arg0)) {
+        } else if (strcmp(argv[0], "SEM_POST") == 0 && argc == 2 &&
+                   parse_i32(argv[1], &insn.arg0)) {
             insn.op = WORKLOAD_SEM_POST;
         } else if (strcmp(argv[0], "LOCK") == 0 && argc == 2 && parse_i32(argv[1], &insn.arg0)) {
             insn.op = WORKLOAD_LOCK;
@@ -117,7 +128,8 @@ int workload_load(const char *path, workload_t *out, char *err, size_t errsz) {
             insn.op = WORKLOAD_UNLOCK;
         } else if (strcmp(argv[0], "MMAP") == 0 && argc == 2 && parse_i32(argv[1], &insn.arg0)) {
             insn.op = WORKLOAD_MMAP;
-        } else if (strcmp(argv[0], "ACCESS") == 0 && argc == 3 && parse_i32(argv[1], &insn.arg0) && parse_i32(argv[2], &insn.arg1)) {
+        } else if (strcmp(argv[0], "ACCESS") == 0 && argc == 3 && parse_i32(argv[1], &insn.arg0) &&
+                   parse_i32(argv[2], &insn.arg1)) {
             insn.op = WORKLOAD_ACCESS;
         } else if (strcmp(argv[0], "MFREE") == 0 && argc == 1) {
             insn.op = WORKLOAD_MFREE;
@@ -145,18 +157,31 @@ int workload_load(const char *path, workload_t *out, char *err, size_t errsz) {
 
 const char *workload_op_name(workload_op_t op) {
     switch (op) {
-        case WORKLOAD_CPU: return "CPU";
-        case WORKLOAD_IO: return "IO";
-        case WORKLOAD_SEND: return "SEND";
-        case WORKLOAD_RECV: return "RECV";
-        case WORKLOAD_SEM_WAIT: return "SEM_WAIT";
-        case WORKLOAD_SEM_POST: return "SEM_POST";
-        case WORKLOAD_LOCK: return "LOCK";
-        case WORKLOAD_UNLOCK: return "UNLOCK";
-        case WORKLOAD_MMAP: return "MMAP";
-        case WORKLOAD_ACCESS: return "ACCESS";
-        case WORKLOAD_MFREE: return "MFREE";
-        case WORKLOAD_EXIT: return "EXIT";
-        default: return "UNKNOWN";
+    case WORKLOAD_CPU:
+        return "CPU";
+    case WORKLOAD_IO:
+        return "IO";
+    case WORKLOAD_SEND:
+        return "SEND";
+    case WORKLOAD_RECV:
+        return "RECV";
+    case WORKLOAD_SEM_WAIT:
+        return "SEM_WAIT";
+    case WORKLOAD_SEM_POST:
+        return "SEM_POST";
+    case WORKLOAD_LOCK:
+        return "LOCK";
+    case WORKLOAD_UNLOCK:
+        return "UNLOCK";
+    case WORKLOAD_MMAP:
+        return "MMAP";
+    case WORKLOAD_ACCESS:
+        return "ACCESS";
+    case WORKLOAD_MFREE:
+        return "MFREE";
+    case WORKLOAD_EXIT:
+        return "EXIT";
+    default:
+        return "UNKNOWN";
     }
 }

@@ -1,11 +1,11 @@
 #ifndef MOSRT_TLB_H
 #define MOSRT_TLB_H
 
+#include "vm_types.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "vm_types.h"
 
 typedef struct {
     uint32_t hits;
@@ -18,7 +18,8 @@ void tlb_init(void);
 /* Reset TLB hit/miss statistics. */
 void tlb_reset_stats(void);
 
-/* Lookup a VPN in TLB. If hit, returns PFN and sets out_dirty/out_permissions. Returns -1 on miss. */
+/* Lookup a VPN in TLB. If hit, returns PFN and sets out_dirty/out_permissions. Returns -1 on miss.
+ */
 int tlb_lookup(uint8_t vpn, uint64_t tick, bool *out_dirty, uint8_t *out_permissions);
 
 /* Insert a mapping into TLB, evicting using LRU if full. */

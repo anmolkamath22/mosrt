@@ -1,7 +1,7 @@
+#include "page_table.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include "page_table.h"
 
 static void test_page_table_mapping(void) {
     page_table_t pt;
@@ -19,9 +19,9 @@ static void test_page_table_mapping(void) {
     uint8_t vpn = 10;
     uint8_t pfn = 5;
     uint8_t perm = VM_PROT_READ | VM_PROT_EXEC;
-    
+
     page_table_map(&pt, vpn, pfn, perm);
-    
+
     pte_t *pte = page_table_lookup(&pt, vpn);
     assert(pte != NULL);
     assert(pte->present);

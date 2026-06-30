@@ -1,6 +1,6 @@
+#include "tlb.h"
 #include <assert.h>
 #include <stdio.h>
-#include "tlb.h"
 
 static void test_tlb_lookup_and_insert(void) {
     tlb_init();
@@ -14,7 +14,7 @@ static void test_tlb_lookup_and_insert(void) {
     uint8_t perm = 0;
     int pfn = tlb_lookup(5, 10, &dirty, &perm);
     assert(pfn == -1);
-    
+
     stats = tlb_get_stats();
     assert(stats.misses == 1);
 

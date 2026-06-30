@@ -305,12 +305,16 @@ static void cmd_pte(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
 }
 
 static void cmd_frames(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
-    (void)ctx; (void)argc; (void)argv;
+    (void)ctx;
+    (void)argc;
+    (void)argv;
     vm_dump_global_frames(stdout);
 }
 
 static void cmd_tlb_cmd(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
-    (void)ctx; (void)argc; (void)argv;
+    (void)ctx;
+    (void)argc;
+    (void)argv;
     vm_dump_global_tlb(stdout);
 }
 
@@ -329,7 +333,9 @@ static void cmd_policy(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
 }
 
 static void cmd_vmem(shell_ctx_t *ctx, int argc, char *argv[SHELL_MAX_ARGS]) {
-    (void)ctx; (void)argc; (void)argv;
+    (void)ctx;
+    (void)argc;
+    (void)argv;
     vm_dump_global_faults(stdout);
 }
 
@@ -349,29 +355,14 @@ typedef struct {
 
 /* Command table — sorted by expected frequency for branch prediction. */
 static const shell_command_t k_commands[] = {
-    {"step",    cmd_step},
-    {"run",     cmd_run},
-    {"ps",      cmd_ps_cmd},
-    {"kill",    cmd_kill},
-    {"sched",   cmd_sched},
-    {"quantum", cmd_quantum},
-    {"nice",    cmd_nice},
-    {"prio",    cmd_prio},
-    {"trace",   cmd_trace},
-    {"start",   cmd_start},
-    {"stop",    cmd_stop},
-    {"queues",  cmd_queues},
-    {"metrics", cmd_metrics_cmd},
-    {"export",  cmd_export},
-    {"bench",   cmd_bench_cmd},
-    {"reset",   cmd_reset},
-    {"vmmap",   cmd_vmmap},
-    {"pte",     cmd_pte},
-    {"frames",  cmd_frames},
-    {"tlb",     cmd_tlb_cmd},
-    {"policy",  cmd_policy},
-    {"vmem",    cmd_vmem},
-    {"help",    cmd_help_cmd},
+    {"step", cmd_step},           {"run", cmd_run},       {"ps", cmd_ps_cmd},
+    {"kill", cmd_kill},           {"sched", cmd_sched},   {"quantum", cmd_quantum},
+    {"nice", cmd_nice},           {"prio", cmd_prio},     {"trace", cmd_trace},
+    {"start", cmd_start},         {"stop", cmd_stop},     {"queues", cmd_queues},
+    {"metrics", cmd_metrics_cmd}, {"export", cmd_export}, {"bench", cmd_bench_cmd},
+    {"reset", cmd_reset},         {"vmmap", cmd_vmmap},   {"pte", cmd_pte},
+    {"frames", cmd_frames},       {"tlb", cmd_tlb_cmd},   {"policy", cmd_policy},
+    {"vmem", cmd_vmem},           {"help", cmd_help_cmd},
 };
 
 #define NUM_COMMANDS (sizeof(k_commands) / sizeof(k_commands[0]))

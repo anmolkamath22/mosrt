@@ -24,8 +24,10 @@ static const char *k_valid_ops[] = {
     "CPU", "IO", "SEND", "RECV", "SEM_WAIT", "SEM_POST", "LOCK", "UNLOCK", "EXIT",
 };
 static const char *k_garbage[] = {
-    "", "BOGUS", "cpu", "io", "1234", "NULL", "CPU CPU", "CPU -1",
-    "CPU 99999999999999999", "SEND", "SEND 1", "RECV 1 2",
+    "",        "BOGUS",  "cpu",
+    "io",      "1234",   "NULL",
+    "CPU CPU", "CPU -1", "CPU 99999999999999999",
+    "SEND",    "SEND 1", "RECV 1 2",
 };
 
 static void write_random_workload(const char *path) {
@@ -89,7 +91,7 @@ int main(int argc, char **argv) {
     }
 
     remove(path);
-    printf("fuzz_workload: %u iterations, %u ok, %u rejected (no crashes)\n",
-           iterations, parse_ok, parse_fail);
+    printf("fuzz_workload: %u iterations, %u ok, %u rejected (no crashes)\n", iterations, parse_ok,
+           parse_fail);
     return 0;
 }

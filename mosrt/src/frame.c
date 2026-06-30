@@ -1,11 +1,11 @@
 #include "frame.h"
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 typedef struct {
-    bool allocated;
     int pid;
     uint8_t vpn;
+    bool allocated;
 } frame_meta_t;
 
 static uint8_t g_ram[VM_PHYS_MEM_SIZE];
@@ -65,13 +65,13 @@ void frame_write_byte(uint32_t phys_addr, uint8_t val) {
 
 void frame_read_block(uint8_t pfn, uint8_t *dest) {
     if (pfn < VM_NUM_FRAMES && dest != NULL) {
-        memcpy(dest, &g_ram[pfn * VM_PAGE_SIZE], VM_PAGE_SIZE);
+        memcpy(dest, &g_ram[(size_t)pfn * VM_PAGE_SIZE], VM_PAGE_SIZE);
     }
 }
 
 void frame_write_block(uint8_t pfn, const uint8_t *src) {
     if (pfn < VM_NUM_FRAMES && src != NULL) {
-        memcpy(&g_ram[pfn * VM_PAGE_SIZE], src, VM_PAGE_SIZE);
+        memcpy(&g_ram[(size_t)pfn * VM_PAGE_SIZE], src, VM_PAGE_SIZE);
     }
 }
 
@@ -85,8 +85,10 @@ frame_stats_t frame_get_stats(void) {
 bool frame_get_owner(uint8_t pfn, int *out_pid, uint8_t *out_vpn) {
     if (pfn < VM_NUM_FRAMES) {
         if (g_frames[pfn].allocated) {
-            if (out_pid != NULL) *out_pid = g_frames[pfn].pid;
-            if (out_vpn != NULL) *out_vpn = g_frames[pfn].vpn;
+            if (out_pid != NULL)
+                *out_pid = g_frames[pfn].pid;
+            if (out_vpn != NULL)
+                *out_vpn = g_frames[pfn].vpn;
             return true;
         }
     }

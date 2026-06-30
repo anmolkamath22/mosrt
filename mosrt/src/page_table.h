@@ -1,11 +1,11 @@
 #ifndef MOSRT_PAGE_TABLE_H
 #define MOSRT_PAGE_TABLE_H
 
+#include "vm_types.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "vm_types.h"
 
 typedef struct {
     pte_t entries[VM_NUM_PAGES];

@@ -1,10 +1,10 @@
 #ifndef MOSRT_SWAP_H
 #define MOSRT_SWAP_H
 
+#include "vm_types.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "vm_types.h"
 
 typedef struct {
     uint32_t allocated_slots;

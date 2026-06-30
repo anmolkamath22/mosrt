@@ -1,6 +1,6 @@
 #include "vm_alloc.h"
-#include "vm.h"
 #include "page_table.h"
+#include "vm.h"
 #include "vm_types.h"
 #include <string.h>
 
@@ -35,7 +35,7 @@ static bool heap_grow(vm_state_t *vm, size_t pages_needed) {
     for (size_t i = 0; i < pages_needed; ++i) {
         uint16_t new_page_addr = vm->stats.heap_break;
         uint8_t vpn = (uint8_t)(new_page_addr >> VM_PAGE_SHIFT);
-        
+
         pte_t *pte = page_table_lookup(&vm->pt, vpn);
         if (pte != NULL) {
             pte->permissions = VM_PROT_READ | VM_PROT_WRITE;
@@ -48,9 +48,11 @@ static bool heap_grow(vm_state_t *vm, size_t pages_needed) {
 }
 
 uint16_t vm_alloc_malloc(int pid, vm_state_t *vm, size_t size, uint64_t tick) {
-    if (vm == NULL || size == 0 || size > UINT16_MAX) return 0;
+    if (vm == NULL || size == 0 || size > UINT16_MAX)
+        return 0;
     size = align_up(size, 4);
-    if (size == 0 || size > UINT16_MAX) return 0;
+    if (size == 0 || size > UINT16_MAX)
+        return 0;
 
     /* Initialize heap if empty */
     if (vm->stats.heap_break == vm->stats.heap_start) {
@@ -61,8 +63,7 @@ uint16_t vm_alloc_malloc(int pid, vm_state_t *vm, size_t size, uint64_t tick) {
             .size = (uint16_t)(vm->stats.heap_break - vm->stats.heap_start - VM_BLOCK_HDR_SIZE),
             .free = true,
             .next = 0,
-            .prev = 0
-        };
+            .prev = 0};
         if (!write_hdr(pid, vm, vm->stats.heap_start, &initial_hdr, tick)) {
             return 0;
         }
@@ -75,17 +76,16 @@ uint16_t vm_alloc_malloc(int pid, vm_state_t *vm, size_t size, uint64_t tick) {
         if (!read_hdr(pid, vm, curr_addr, &curr_hdr, tick)) {
             return 0;
         }
-        
+
         if (curr_hdr.free && curr_hdr.size >= size) {
             /* Check if we can split the block */
             if (curr_hdr.size >= size + VM_BLOCK_HDR_SIZE + 4) {
                 uint16_t next_addr = (uint16_t)(curr_addr + VM_BLOCK_HDR_SIZE + size);
-                vm_block_hdr_t next_hdr = {
-                    .size = (uint16_t)(curr_hdr.size - size - VM_BLOCK_HDR_SIZE),
-                    .free = true,
-                    .next = curr_hdr.next,
-                    .prev = curr_addr
-                };
+                vm_block_hdr_t next_hdr = {.size =
+                                               (uint16_t)(curr_hdr.size - size - VM_BLOCK_HDR_SIZE),
+                                           .free = true,
+                                           .next = curr_hdr.next,
+                                           .prev = curr_addr};
                 if (!write_hdr(pid, vm, next_addr, &next_hdr, tick)) {
                     return 0;
                 }
@@ -131,7 +131,7 @@ uint16_t vm_alloc_malloc(int pid, vm_state_t *vm, size_t size, uint64_t tick) {
     if (pages_needed == 0U) {
         return 0;
     }
-    
+
     uint16_t old_break = vm->stats.heap_break;
     if (!heap_grow(vm, pages_needed)) {
         return 0; /* Heap overflow */
@@ -139,12 +139,11 @@ uint16_t vm_alloc_malloc(int pid, vm_state_t *vm, size_t size, uint64_t tick) {
 
     /* Create the new free block at the old break */
     uint16_t new_block_addr = old_break;
-    vm_block_hdr_t new_block_hdr = {
-        .size = (uint16_t)(pages_needed * VM_PAGE_SIZE - VM_BLOCK_HDR_SIZE),
-        .free = true,
-        .next = 0,
-        .prev = curr_addr
-    };
+    vm_block_hdr_t new_block_hdr = {.size =
+                                        (uint16_t)(pages_needed * VM_PAGE_SIZE - VM_BLOCK_HDR_SIZE),
+                                    .free = true,
+                                    .next = 0,
+                                    .prev = curr_addr};
     if (!write_hdr(pid, vm, new_block_addr, &new_block_hdr, tick)) {
         return 0;
     }
@@ -263,7 +262,8 @@ vm_alloc_stats_t vm_alloc_get_stats(int pid, vm_state_t *vm, uint64_t tick) {
              * so internal fragmentation is small but present. */
         }
 
-        if (curr_hdr.next == 0) break;
+        if (curr_hdr.next == 0)
+            break;
         curr_addr = curr_hdr.next;
     }
     return stats;

@@ -1,6 +1,6 @@
 #include "tlb.h"
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 static tlb_entry_t g_tlb[VM_TLB_SIZE];
 static tlb_stats_t g_stats;
@@ -19,8 +19,10 @@ int tlb_lookup(uint8_t vpn, uint64_t tick, bool *out_dirty, uint8_t *out_permiss
     for (int i = 0; i < VM_TLB_SIZE; ++i) {
         if (g_tlb[i].valid && g_tlb[i].vpn == vpn) {
             g_tlb[i].last_used_tick = (uint32_t)tick;
-            if (out_dirty != NULL) *out_dirty = g_tlb[i].dirty;
-            if (out_permissions != NULL) *out_permissions = g_tlb[i].permissions;
+            if (out_dirty != NULL)
+                *out_dirty = g_tlb[i].dirty;
+            if (out_permissions != NULL)
+                *out_permissions = g_tlb[i].permissions;
             g_stats.hits++;
             return g_tlb[i].pfn;
         }
@@ -97,15 +99,14 @@ tlb_stats_t tlb_get_stats(void) {
 }
 
 void tlb_dump(FILE *out) {
-    if (out == NULL) out = stdout;
-    fprintf(out, "%-5s %-5s %-5s %-5s %-5s %-10s\n", 
-            "Entry", "VPN", "PFN", "Valid", "Dirty", "Last Used");
+    if (out == NULL)
+        out = stdout;
+    fprintf(out, "%-5s %-5s %-5s %-5s %-5s %-10s\n", "Entry", "VPN", "PFN", "Valid", "Dirty",
+            "Last Used");
     for (int i = 0; i < VM_TLB_SIZE; ++i) {
         if (g_tlb[i].valid) {
-            fprintf(out, "[%02d]  0x%02X  0x%02X  %-5s %-5s %-10u\n",
-                    i, g_tlb[i].vpn, g_tlb[i].pfn,
-                    g_tlb[i].valid ? "yes" : "no",
-                    g_tlb[i].dirty ? "yes" : "no",
+            fprintf(out, "[%02d]  0x%02X  0x%02X  %-5s %-5s %-10u\n", i, g_tlb[i].vpn, g_tlb[i].pfn,
+                    g_tlb[i].valid ? "yes" : "no", g_tlb[i].dirty ? "yes" : "no",
                     g_tlb[i].last_used_tick);
         }
     }

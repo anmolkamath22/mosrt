@@ -3,9 +3,9 @@
 #include <string.h>
 
 typedef struct {
-    bool allocated;
     int pid;
     uint8_t vpn;
+    bool allocated;
 } swap_meta_t;
 
 static uint8_t g_swap_mem[VM_NUM_SWAP_SLOTS][VM_PAGE_SIZE];
