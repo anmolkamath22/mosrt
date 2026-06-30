@@ -1,0 +1,38 @@
+name: MOSRT CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install quality tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format clang-tidy cppcheck lcov
+      - name: Build
+        working-directory: mosrt
+        run: make
+      - name: Test
+        working-directory: mosrt
+        run: make test
+      - name: Benchmarks
+        working-directory: mosrt
+        run: make bench
+      - name: Format check
+        working-directory: mosrt
+        run: make format-check
+      - name: Static analysis
+        working-directory: mosrt
+        run: |
+          make cppcheck
+          make tidy
+      - name: Sanitizers
+        working-directory: mosrt
+        run: make sanitize
+      - name: Coverage
+        working-directory: mosrt
+        run: make coverage

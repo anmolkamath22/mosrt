@@ -1,0 +1,3 @@
+CPU 25
+CPU 20
+EXIT

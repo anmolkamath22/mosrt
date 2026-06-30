@@ -1,13 +1,15 @@
-# MOSRT (Mini-OS Runtime)
+# MOSRT Source Tree
 
-Userspace mini OS runtime in C for Linux.
+This directory contains the MOSRT runtime implementation, tests, benchmark runner, demo workloads, and generated benchmark artifacts.
 
-Current scope:
-- PCB + process table
-- Phase 1 shell commands (`run`, `ps`, `kill`, `sched`, `quantum`, `trace`, `start`, `step`)
+Use the root [README.md](../README.md) for the full project overview, architecture diagrams, build instructions, benchmark tables, and resume summary.
 
-Build and run:
+Common commands:
+
 ```bash
-gcc -std=c11 -Wall -Wextra -pedantic src/main.c src/shell.c src/proc.c -o mosrt
+make
+make test
+make bench
+make sanitize
 ./mosrt
 ```

@@ -1,0 +1,4 @@
+CPU 1
+IO 1
+CPU 1
+EXIT

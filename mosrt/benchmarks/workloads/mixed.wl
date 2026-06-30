@@ -1,0 +1,6 @@
+CPU 8
+IO 4
+CPU 6
+IO 3
+CPU 8
+EXIT

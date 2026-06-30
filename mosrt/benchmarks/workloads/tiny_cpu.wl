@@ -1,0 +1,2 @@
+CPU 1
+EXIT

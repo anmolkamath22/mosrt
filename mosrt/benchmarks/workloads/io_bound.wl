@@ -1,6 +1,6 @@
 CPU 2
-IO 5
+IO 8
 CPU 2
-IO 5
+IO 8
 CPU 2
 EXIT

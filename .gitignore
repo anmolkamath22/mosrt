@@ -1,3 +1,13 @@
 
 MOSRT_Roadmap.md
 MOSRT_Roadmap.txt
+/.codex
+/mosrt/mosrt
+/mosrt/src/*.o
+/mosrt/tests/test_ipc_sync
+/mosrt/tests/test_workload
+/mosrt/tests/test_scheduler
+/mosrt/tools/mosrt_bench
+*.gcda
+*.gcno
+*.gcov

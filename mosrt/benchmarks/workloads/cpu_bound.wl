@@ -1,0 +1,3 @@
+CPU 50
+CPU 50
+EXIT
