@@ -415,27 +415,6 @@ make tests/fuzz_workload
 ./tests/fuzz_workload 10000 42     # with seed
 ```
 
-## CI
-
-GitHub Actions runs:
-
-- Build with `-Werror`
-- Unit / integration / stress tests
-- Benchmarks (artifacts uploaded)
-- clang-format check
-- cppcheck
-- clang-tidy
-- ASan + UBSan
-- Valgrind leak checking
-- Coverage build
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-improvement`
-3. Ensure `make test && make sanitize` pass
-4. Run `make format` before committing
-5. Open a pull request with a clear description
 
 ### Developer Quick Start
 
@@ -447,13 +426,7 @@ make unit           # run unit tests only
 make sanitize       # full sanitizer check
 ```
 
-### Code Style
 
-- LLVM-based formatting via `.clang-format`
-- 4-space indentation, 100-column limit
-- Include headers in sorted order
-- All public functions documented in headers
-- All magic numbers named as `#define` constants
 
 
 
